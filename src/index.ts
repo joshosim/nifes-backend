@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB, disconnectDB, prisma } from './config/database';
 import authRoutes from './routes/auth.routes';
+import userRoutes from './routes/user.routes';
 
 //this imports the .env data into this project in this index.ts
 dotenv.config();
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
 const PORT = process.env.PORT || 5000;
 
