@@ -188,3 +188,40 @@ export const requestNewOTP = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to request new OTP' });
   }
 };
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        error: 'Email and new password are required'
+      });
+    }
+
+    //lets check if the user exist first so we can change the password
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { email },
+      data: {
+        password: hashedPassword,
+        otp: null,
+        otpExpiry: null,
+      }
+    });
+
+    res.json({
+      message: 'Password reset successfully!',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+};
