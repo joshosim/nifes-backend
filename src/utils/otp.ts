@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer"
 import dotenv from 'dotenv';
+import { MailtrapTransport } from "mailtrap";
 
 dotenv.config();
 
@@ -11,17 +12,15 @@ export const sendOTP = async (email: string, otp: string): Promise<void> => {
   console.log(`📧 OTP for ${email}: ${otp}`);
 
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const transporter = nodemailer.createTransport(
+      MailtrapTransport({
+        token: process.env.MAILTRAP_TOKEN || "",
+      })
+    );
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
-      to: email,
+      to: [email],
       subject: "Your OTP Code - Nifes Unity Flow",
       text: `Your OTP code is: ${otp}. Valid for 10 minutes.`,
       html: `<div style = "font-family: Arial, sans-serif; background:#f4f6f8; padding:40px 0;">
@@ -50,7 +49,7 @@ export const sendOTP = async (email: string, otp: string): Promise<void> => {
                 </p>
               </div>
                 <p style = "text-align:center; font-size:12px; color:#999; margin-top:20px;" >
-                   © 2026 Tailor App
+                   © 2026 Nifes Unity Flow
                 </p>
             </div>`,
     });
