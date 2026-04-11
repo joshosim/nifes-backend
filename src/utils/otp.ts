@@ -19,7 +19,7 @@ export const sendOTP = async (email: string, otp: string): Promise<void> => {
     );
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: { name: 'Nifes Unity Flow', address: process.env.EMAIL_FROM as string },
       to: [email],
       subject: "Your OTP Code - Nifes Unity Flow",
       text: `Your OTP code is: ${otp}. Valid for 10 minutes.`,
