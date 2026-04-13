@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { connectDB, disconnectDB, prisma } from './config/database';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import mentorRoutes from './routes/mentor.routes';
 
 //this imports the .env data into this project in this index.ts
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/mentors', mentorRoutes);
 
 const PORT = process.env.PORT || 5000;
 
