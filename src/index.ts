@@ -1,14 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { connectDB, disconnectDB, prisma } from './config/database';
+import { connectDB, disconnectDB } from './config/database';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import mentorRoutes from './routes/mentor.routes';
 import passport from './config/passport';
 
-//this imports the .env data into this project in this index.ts
-dotenv.config();
 connectDB()
 
 //setting up the app with expressjs
