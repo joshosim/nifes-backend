@@ -1,23 +1,27 @@
-const sgMail = require("@sendgrid/mail");
+const nodemailer = require("nodemailer");
+const { MailtrapTransport } = require("mailtrap");
 require("dotenv").config();
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// Transport
+const transport = nodemailer.createTransport(
+  MailtrapTransport({
+    token: process.env.MAILTRAP_TOKEN,
+  })
+);
 
 export const generateOTP = (): string => {
   return Math.floor(10000 + Math.random() * 90000).toString();
 };
 
-export const sendOTP = async (email: string, otp: string): Promise<void> => {
-  console.log(`📧 OTP for ${email}: ${otp}`);
-
+export const sendOTP = async (email: string, otp: string) => {
   try {
-    const msg = {
-      to: email,
+    const info = await transport.sendMail({
       from: {
-        email: process.env.EMAIL_FROM,
+        address: process.env.EMAIL_FROM,
         name: "Nifes Unity Flow",
       },
-      subject: "Your OTP Code - Nifes Unity Flow",
+      to: [email],
+      subject: "Your OTP Code",
       html: `
         <div style="font-family: Arial, sans-serif; background:#f4f6f8; padding:40px 0;">
           <div style="max-width:500px; margin:auto; background:white; border-radius:8px; padding:30px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.05);">
@@ -42,13 +46,11 @@ export const sendOTP = async (email: string, otp: string): Promise<void> => {
           </p>
         </div>
       `,
-      categories: ["OTP"],
-    };
+      category: "OTP",
+    });
 
-    await sgMail.send(msg);
-
-    console.log("✅ Email sent successfully via SendGrid");
-  } catch (error: any) {
-    console.error("❌ Email failed:", error.response?.body || error.message);
+    console.log("✅ Email sent:", info);
+  } catch (error) {
+    console.error("❌ Email failed:", error);
   }
 };

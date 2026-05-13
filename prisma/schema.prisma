@@ -22,12 +22,16 @@ enum Role {
 model User {
   id              String           @id @default(uuid())
   email           String           @unique
-  password        String
+  password        String?
+  avatar          String?
   name            String
   role            Role
   isVerified      Boolean          @default(false)
   otp             String?
   otpExpiry       DateTime?
+  googleId        String?          @unique
+  appleId         String?          @unique
+  authProvider    String           @default("local") // "local" | "google" | "apple"
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   mentorSessions  Session[]        @relation("MentorSessions")

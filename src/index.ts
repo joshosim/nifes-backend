@@ -5,6 +5,7 @@ import { connectDB, disconnectDB, prisma } from './config/database';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import mentorRoutes from './routes/mentor.routes';
+import passport from './config/passport';
 
 //this imports the .env data into this project in this index.ts
 dotenv.config();
@@ -17,6 +18,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
 
 // Routes
 app.use('/api/auth', authRoutes);

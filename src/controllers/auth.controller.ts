@@ -119,7 +119,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password!);
 
     if (!isValidPassword) {
       return res.status(401).json({
@@ -225,3 +225,45 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to reset password' });
   }
 };
+
+//Google OAuth callback handler
+export const google0AuthCallback = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Google authentication failed' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role ?? 'user' },
+      process.env.JWT_SECRET!,
+      { expiresIn: '7d' }
+    );
+    return res.status(200).json({
+      message: 'Google login successful',
+      token,
+      user: sanitizeUser(user)
+    });
+
+  } catch (error) {
+    return res.status(500).json({ error: 'Server error during Google callback' });
+  }
+}
+
+// ── Helper: safe user response (no sensitive fields) ─────────
+const sanitizeUser = (user: any) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  avatar: user.avatar,
+  authProvider: user.authProvider,
+});
+
+export const appleLogin = async (req: Request, res: Response) => {
+  try {
+
+  } catch (error) {
+
+  }
+}
