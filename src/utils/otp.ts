@@ -1,11 +1,12 @@
-const nodemailer = require("nodemailer");
-const { MailtrapTransport } = require("mailtrap");
 require("dotenv").config();
+console.log("TOKEN:", process.env.MAILTRAP_TOKEN);
 
-// Transport
+import { MailtrapTransport } from "mailtrap";
+import nodemailer from "nodemailer";
+
 const transport = nodemailer.createTransport(
   MailtrapTransport({
-    token: process.env.MAILTRAP_TOKEN,
+    token: process.env.MAILTRAP_TOKEN!,
   })
 );
 
@@ -17,7 +18,7 @@ export const sendOTP = async (email: string, otp: string) => {
   try {
     const info = await transport.sendMail({
       from: {
-        address: process.env.EMAIL_FROM,
+        address: process.env.EMAIL_FROM!,
         name: "Nifes Unity Flow",
       },
       to: [email],
