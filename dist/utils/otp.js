@@ -1,11 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendOTP = exports.generateOTP = void 0;
-const nodemailer = require("nodemailer");
-const { MailtrapTransport } = require("mailtrap");
 require("dotenv").config();
-// Transport
-const transport = nodemailer.createTransport(MailtrapTransport({
+console.log("TOKEN:", process.env.MAILTRAP_TOKEN);
+const mailtrap_1 = require("mailtrap");
+const nodemailer_1 = __importDefault(require("nodemailer"));
+const transport = nodemailer_1.default.createTransport((0, mailtrap_1.MailtrapTransport)({
     token: process.env.MAILTRAP_TOKEN,
 }));
 const generateOTP = () => {

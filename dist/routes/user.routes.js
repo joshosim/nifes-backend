@@ -2,7 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const user_controller_1 = require("../controllers/user.controller");
+const cloundinary_1 = require("../config/cloundinary");
 const router = (0, express_1.Router)();
 router.get('/users', user_controller_1.getUsers);
 router.get('/users/:id', user_controller_1.getOneUser);
+router.patch('/update-profile/:id', cloundinary_1.uploadProfilePics.single('avatar'), user_controller_1.updateProfile);
 exports.default = router;

@@ -15,7 +15,7 @@ const verficationStorage = new CloudinaryStorage({
     folder: 'nifes-unity-flow/verification',
     allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
     transformation: [{ width: 500, height: 500, crop: 'limit' }],
-    resource_type: 'auto', //for pdfs
+    resource_type: 'auto', //for pdf
   } as any
 });
 
