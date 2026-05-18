@@ -29,6 +29,12 @@ model User {
   isVerified      Boolean          @default(false)
   otp             String?
   otpExpiry       DateTime?
+  nifesZone       String?
+  nifesSchool     String?
+  unit            String?
+  wing            String?
+  courseOfStudy   String?
+  level           String?
   googleId        String?          @unique
   appleId         String?          @unique
   authProvider    String           @default("local") // "local" | "google" | "apple"
