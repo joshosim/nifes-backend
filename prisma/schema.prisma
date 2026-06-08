@@ -44,6 +44,7 @@ model User {
   userSessions    Session[]        @relation("UserSessions")
   savedScriptures SavedScripture[]
   mentorProfile   MentorProfile?
+  attendances     Attendance[]
 }
 
 model AnchorWord {
@@ -86,6 +87,44 @@ enum FocusArea {
   SPIRITUAL
   CAREER
   MENTAL_HEALTH
+}
+
+enum ProgramType {
+  SEMINAR
+  CAMPING
+  CONFERENCE
+  BIBLE_STUDY_WEEKEND
+  OTHER
+}
+
+model Program {
+  id             String       @id @default(uuid())
+  title          String
+  type           ProgramType
+  description    String?
+  attendanceCode String       @unique
+  startTime      DateTime
+  endTime        DateTime
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  attendances Attendance[]
+
+  @@map("programs")
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  userId    String
+  programId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programId])
+  @@map("attendances")
 }
 
 model MentorProfile {

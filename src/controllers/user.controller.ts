@@ -92,4 +92,13 @@ export const updateProfile = async (req: Request, res: Response) => {
   }
 }
 
+export const markAttendance = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+//let get to work
+  } catch (error) {
+    console.error("error:", error);
+  }
+}
+
 

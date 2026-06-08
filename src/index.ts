@@ -5,6 +5,8 @@ import { connectDB, disconnectDB } from './config/database';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import mentorRoutes from './routes/mentor.routes';
+import adminRoutes from './routes/admin.routes';
+import attendanceRoutes from './routes/attendance.routes';
 import passport from './config/passport';
 
 connectDB()
@@ -22,10 +24,12 @@ app.use(passport.initialize());
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/mentors', mentorRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-// Connect to Prisma and start server
+// Connect to Prisma and start server/
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 NIFES API running on port ${PORT}`);
