@@ -7,12 +7,23 @@ import userRoutes from './routes/user.routes';
 import mentorRoutes from './routes/mentor.routes';
 import adminRoutes from './routes/admin.routes';
 import attendanceRoutes from './routes/attendance.routes';
+import chatRoutes from './routes/chat.routes';
 import passport from './config/passport';
+import { registerChatHandlers } from './sockets/chat.socket';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
-connectDB()
+connectDB();
 
-//setting up the app with expressjs
 const app = express();
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
 
 // Middleware
 app.use(cors());
@@ -26,35 +37,40 @@ app.use('/api/users', userRoutes);
 app.use('/api/mentors', mentorRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/chat', chatRoutes);
 
+// Socket.io
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+  registerChatHandlers(io, socket);
+});
+
+// ONE server — httpServer handles both HTTP and WebSocket
 const PORT = process.env.PORT || 5000;
 
-// Connect to Prisma and start server/
-
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   console.log(`🚀 NIFES API running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
 });
 
-process.on("unhandledRejection", async (err) => {
-  console.error("Unhandled Rejection:", err);
+process.on('unhandledRejection', async (err) => {
+  console.error('Unhandled Rejection:', err);
   server.close(async () => {
     await disconnectDB();
     process.exit(1);
-  })
-
+  });
 });
 
-process.on("uncaughtException", async (err) => {
-  console.error("Uncaught Exception:", err);
+process.on('uncaughtException', async (err) => {
+  console.error('Uncaught Exception:', err);
   await disconnectDB();
   process.exit(1);
 });
 
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received, shutting down gracefully...");
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
   server.close(async () => {
     await disconnectDB();
-    process.exit(1);
-  })
+    process.exit(0);
+  });
 });

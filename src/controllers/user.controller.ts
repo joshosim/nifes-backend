@@ -1,6 +1,25 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 
+export const getMentors = async (req: Request, res: Response) => {
+  try {
+    const mentors = await prisma.user.findMany({
+      where: { role: 'MENTOR' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        mentorProfile: true,
+      },
+    });
+    res.json({ mentors });
+  } catch (error) {
+    console.error('Error fetching mentors:', error);
+    res.status(500).json({ error: 'Failed to fetch mentors' });
+  }
+};
+
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany();
@@ -8,6 +27,36 @@ export const getUsers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+};
+
+export const getOneMentor = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const mentor = await prisma.user.findUnique({
+      where: { id: String(id) },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        role: true,
+        mentorProfile: true,
+      },
+    });
+
+    if (!mentor) {
+      return res.status(404).json({ error: 'Mentor not found' });
+    }
+
+    if (mentor.role !== 'MENTOR') {
+      return res.status(400).json({ error: 'User is not a mentor' });
+    }
+
+    res.json({ mentor });
+  } catch (error) {
+    console.error('Error fetching mentor:', error);
+    res.status(500).json({ error: 'Failed to fetch mentor' });
   }
 };
 
@@ -95,7 +144,7 @@ export const updateProfile = async (req: Request, res: Response) => {
 export const markAttendance = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-//let get to work
+    //let get to work
   } catch (error) {
     console.error("error:", error);
   }

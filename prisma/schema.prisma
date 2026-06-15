@@ -20,31 +20,34 @@ enum Role {
 }
 
 model User {
-  id              String           @id @default(uuid())
-  email           String           @unique
-  password        String?
-  avatar          String?
-  name            String
-  role            Role
-  isVerified      Boolean          @default(false)
-  otp             String?
-  otpExpiry       DateTime?
-  nifesZone       String?
-  nifesSchool     String?
-  unit            String?
-  wing            String?
-  courseOfStudy   String?
-  level           String?
-  googleId        String?          @unique
-  appleId         String?          @unique
-  authProvider    String           @default("local") // "local" | "google" | "apple"
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  mentorSessions  Session[]        @relation("MentorSessions")
-  userSessions    Session[]        @relation("UserSessions")
-  savedScriptures SavedScripture[]
-  mentorProfile   MentorProfile?
-  attendances     Attendance[]
+  id                  String           @id @default(uuid())
+  email               String           @unique
+  password            String?
+  avatar              String?
+  name                String
+  role                Role
+  isVerified          Boolean          @default(false)
+  otp                 String?
+  otpExpiry           DateTime?
+  nifesZone           String?
+  nifesSchool         String?
+  unit                String?
+  wing                String?
+  courseOfStudy       String?
+  level               String?
+  googleId            String?          @unique
+  appleId             String?          @unique
+  authProvider        String           @default("local") // "local" | "google" | "apple"
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  mentorSessions      Session[]        @relation("MentorSessions")
+  userSessions        Session[]        @relation("UserSessions")
+  savedScriptures     SavedScripture[]
+  mentorProfile       MentorProfile?
+  attendances         Attendance[]
+  mentorConversations Conversation[]   @relation("MentorConversations")
+  userConversations   Conversation[]   @relation("UserConversations")
+  sentMessages        Message[]        @relation("SentMessages")
 }
 
 model AnchorWord {
@@ -98,16 +101,16 @@ enum ProgramType {
 }
 
 model Program {
-  id             String       @id @default(uuid())
+  id             String      @id @default(uuid())
   title          String
   type           ProgramType
   description    String?
-  attendanceCode String       @unique
+  attendanceCode String      @unique
   startTime      DateTime
   endTime        DateTime
   createdBy      String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   attendances Attendance[]
 
@@ -154,4 +157,36 @@ model MentorProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// I added this conversation and Message schema for
+// the chatting feature. Each Conversation is between
+// one mentor and one user, and can have multiple messages.
+model Conversation {
+  id        String   @id @default(uuid())
+  mentorId  String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mentor   User      @relation("MentorConversations", fields: [mentorId], references: [id], onDelete: Cascade)
+  user     User      @relation("UserConversations", fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([mentorId, userId]) // one chat per pair
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
 }
