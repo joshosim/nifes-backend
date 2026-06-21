@@ -92,6 +92,20 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
+export const getAllMentors = async (req: Request, res: Response) => {
+  try {
+    const mentors = await prisma.user.findMany({
+      where: { role: 'MENTOR' },
+      select: {
+        id: true, name: true, email: true,
+        avatar: true, isVerified: true, createdAt: true,
+      },
+    });
+    return res.status(200).json({ data: mentors });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+};
 export const getAllAdmins = async (req: Request, res: Response) => {
   try {
     const admins = await prisma.user.findMany({
