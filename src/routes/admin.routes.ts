@@ -26,7 +26,7 @@ router.post('/mentors/:userId/reject', rejectMentor);
 // User management
 router.get('/users', getAllUsers);
 router.get('/admins', getAllAdmins);
-router.post('/mentors/mentors', getAllMentors);
+router.post('/mentors', getAllMentors);
 router.delete('/users/:userId', deleteUser);
 
 export default router;
