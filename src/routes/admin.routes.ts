@@ -8,6 +8,7 @@ import {
   getAllAdmins,
   getAllMentors,
   deleteUser,
+  getDashboardStats,
 } from '../controllers/admin.controller';
 const { authMiddleware } = require('../middleware/auth.middleware');
 import { requireRole } from '../middleware/role.middleware';
@@ -22,6 +23,7 @@ router.get('/mentors/pending', getPendingMentors);
 router.get('/mentors/approved', getApprovedMentors);
 router.post('/mentors/:userId/approve', approveMentor);
 router.post('/mentors/:userId/reject', rejectMentor);
+router.post('/stats', getDashboardStats)
 
 // User management
 router.get('/users', getAllUsers);

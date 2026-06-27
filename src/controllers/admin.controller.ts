@@ -163,15 +163,16 @@ export const deleteUser = async (req: Request, res: Response) => {
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
-    const [totalUsers, totalMentors, pendingMentors, totalPrograms] = await Promise.all([
+    const [totalUsers, totalMentors, pendingMentors, totalPrograms, approvedMentors] = await Promise.all([
       prisma.user.count({ where: { role: 'USER' } }),
       prisma.user.count({ where: { role: 'MENTOR' } }),
       prisma.mentorProfile.count({ where: { verificationStatus: 'pending' } }),
       prisma.program.count(),
+      prisma.mentorProfile.count({ where: { verificationStatus: 'pending' } }),
     ]);
 
     return res.status(200).json({
-      data: { totalUsers, totalMentors, pendingMentors, totalPrograms },
+      data: { totalUsers, totalMentors, pendingMentors, totalPrograms, approvedMentors },
     });
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error });
