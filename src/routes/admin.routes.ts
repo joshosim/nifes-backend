@@ -21,14 +21,14 @@ router.use(authMiddleware, requireRole('ADMIN'));
 // Mentor management
 router.get('/mentors/pending', getPendingMentors);
 router.get('/mentors/approved', getApprovedMentors);
-router.post('/mentors/:userId/approve', approveMentor);
-router.post('/mentors/:userId/reject', rejectMentor);
-router.post('/stats', getDashboardStats)
+router.patch('/mentors/:userId/approve', approveMentor);
+router.patch('/mentors/:userId/reject', rejectMentor);
+router.get('/stats', getDashboardStats)
 
 // User management
 router.get('/users', getAllUsers);
 router.get('/admins', getAllAdmins);
-router.post('/mentors', getAllMentors);
+router.get('/mentors', getAllMentors);
 router.delete('/users/:userId', deleteUser);
 
 export default router;
