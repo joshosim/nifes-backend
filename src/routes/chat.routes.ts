@@ -6,8 +6,11 @@ import {
   sendMessage,
   markAsRead,
 } from '../controllers/chat.controller';
+import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
+
+router.use(authMiddleware); // protect all chat routes
 
 router.get('/conversations/:userId', getConversations);
 router.get('/conversations/:conversationId/messages', getMessages);

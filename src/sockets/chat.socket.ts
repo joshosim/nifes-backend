@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { prisma } from '../config/database';
+import jwt from 'jsonwebtoken';
 
 interface SendMessagePayload {
   conversationId: string;
@@ -19,6 +20,19 @@ interface ReadReceiptPayload {
 }
 
 export const registerChatHandlers = (io: Server, socket: Socket) => {
+  // Verify JWT on connection
+  const token = socket.handshake.auth?.token;
+  let authenticatedUserId: string | null = null;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    authenticatedUserId = decoded.id;
+  } catch {
+    socket.emit('error', { message: 'Unauthorized' });
+    socket.disconnect();
+    return;
+  }
+
   // Client joins a conversation room when they open a chat
   socket.on('join_conversation', (conversationId: string) => {
     socket.join(conversationId);
@@ -31,7 +45,8 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
 
   // Real-time message send
   socket.on('send_message', async (payload: SendMessagePayload) => {
-    const { conversationId, senderId, content } = payload;
+    const { conversationId, content } = payload;
+    const senderId = authenticatedUserId!; // always use the authenticated user, ignore client-sent senderId
 
     if (!conversationId || !senderId || !content?.trim()) {
       socket.emit('error', { message: 'Invalid payload' });
@@ -79,14 +94,16 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
 
   // Typing indicator — lightweight, no DB write
   socket.on('typing', (payload: TypingPayload) => {
-    const { conversationId, userId, isTyping } = payload;
+    const { conversationId, isTyping } = payload;
+    const userId = authenticatedUserId!;
     // Broadcast to the room EXCEPT the sender
     socket.to(conversationId).emit('typing', { userId, isTyping });
   });
 
   // Read receipts
   socket.on('read_receipt', async (payload: ReadReceiptPayload) => {
-    const { conversationId, userId } = payload;
+    const { conversationId } = payload;
+    const userId = authenticatedUserId!;
 
     try {
       await prisma.message.updateMany({
