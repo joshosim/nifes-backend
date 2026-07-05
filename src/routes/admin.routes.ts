@@ -5,12 +5,14 @@ import {
   getPendingMentors,
   getApprovedMentors,
   getAssignedMentors,
+  getMenteesUnderMentor,
   approveMentor,
   rejectMentor,
   // Users
   getAllUsers,
   getAssignedUsers,
   getUnassignedUsers,
+  getMentorOfUser,
   // Admins
   getAllAdmins,
   promoteToAdmin,
@@ -39,6 +41,7 @@ router.get('/mentors', getAllMentors);
 router.get('/mentors/pending', getPendingMentors);
 router.get('/mentors/approved', getApprovedMentors);
 router.get('/mentors/assigned', getAssignedMentors);
+router.get('/mentors/:mentorId/mentees', getMenteesUnderMentor);
 router.patch('/mentors/:userId/approve', approveMentor);
 router.patch('/mentors/:userId/reject', rejectMentor);
 
@@ -46,6 +49,7 @@ router.patch('/mentors/:userId/reject', rejectMentor);
 router.get('/users', getAllUsers);
 router.get('/users/assigned', getAssignedUsers);
 router.get('/users/unassigned', getUnassignedUsers);
+router.get('/users/:userId/mentor', getMentorOfUser);
 router.delete('/users/:userId', deleteUser);
 
 // ─── ADMIN MANAGEMENT ────────────────────────────────────────

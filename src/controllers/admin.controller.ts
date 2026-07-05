@@ -203,6 +203,56 @@ export const getUnassignedUsers = async (req: Request, res: Response) => {
   }
 };
 
+// Get all mentees assigned to a specific mentor
+export const getMenteesUnderMentor = async (req: Request, res: Response) => {
+  try {
+    const { mentorId } = req.params;
+
+    const requests = await prisma.mentorshipRequest.findMany({
+      where: { mentorId: String(mentorId), status: 'ACCEPTED' },
+      include: {
+        mentee: {
+          select: {
+            id: true, name: true, email: true, avatar: true,
+            nifesSchool: true, courseOfStudy: true, level: true,
+          },
+        },
+      },
+    });
+
+    return res.status(200).json({ count: requests.length, data: requests.map((r) => r.mentee) });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+// Get the mentor assigned to a specific mentee
+export const getMentorOfUser = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const request = await prisma.mentorshipRequest.findFirst({
+      where: { menteeId: String(userId), status: 'ACCEPTED' },
+      include: {
+        mentor: {
+          select: {
+            id: true, name: true, email: true, avatar: true,
+            mentorProfile: { select: { bio: true, focusArea: true, profilePhotoUrl: true, isAvailable: true } },
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      return res.status(200).json({ mentor: null, message: 'This user has no assigned mentor' });
+    }
+
+    return res.status(200).json({ mentor: request.mentor });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+};
+
 // ─── ADMIN MANAGEMENT ────────────────────────────────────────
 
 export const getAllAdmins = async (req: Request, res: Response) => {
