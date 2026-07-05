@@ -2,22 +2,57 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 import QRCode from 'qrcode';
 
+// ─── SHARED FULL SELECTS ─────────────────────────────────────
+
+const fullUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  avatar: true,
+  role: true,
+  isVerified: true,
+  nifesZone: true,
+  nifesSchool: true,
+  unit: true,
+  wing: true,
+  courseOfStudy: true,
+  level: true,
+  authProvider: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+const fullMentorProfileSelect = {
+  id: true,
+  fellowshipPosition: true,
+  campus: true,
+  verificationFileUrl: true,
+  verificationStatus: true,
+  profilePhotoUrl: true,
+  bio: true,
+  focusArea: true,
+  isAvailable: true,
+  availableDays: true,
+  availableTimeStart: true,
+  availableTimeEnd: true,
+  onboardingStep: true,
+  isOnboardingComplete: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+const fullMentorUserSelect = {
+  ...fullUserSelect,
+  mentorProfile: { select: fullMentorProfileSelect },
+};
+
 // ─── MENTOR MANAGEMENT ───────────────────────────────────────
 
 export const getAllMentors = async (req: Request, res: Response) => {
   try {
     const mentors = await prisma.user.findMany({
       where: { role: 'MENTOR' },
-      select: {
-        id: true, name: true, email: true, avatar: true,
-        isVerified: true, createdAt: true,
-        mentorProfile: {
-          select: {
-            bio: true, focusArea: true, verificationStatus: true,
-            isAvailable: true, profilePhotoUrl: true,
-          },
-        },
-      },
+      select: fullMentorUserSelect,
     });
     return res.status(200).json({ count: mentors.length, data: mentors });
   } catch (error) {
@@ -29,8 +64,9 @@ export const getPendingMentors = async (req: Request, res: Response) => {
   try {
     const mentors = await prisma.mentorProfile.findMany({
       where: { verificationStatus: 'pending', isOnboardingComplete: true },
-      include: {
-        user: { select: { id: true, name: true, email: true, avatar: true } },
+      select: {
+        ...fullMentorProfileSelect,
+        user: { select: fullUserSelect },
       },
     });
     return res.status(200).json({ count: mentors.length, data: mentors });
@@ -43,8 +79,9 @@ export const getApprovedMentors = async (req: Request, res: Response) => {
   try {
     const mentors = await prisma.mentorProfile.findMany({
       where: { verificationStatus: 'approved' },
-      include: {
-        user: { select: { id: true, name: true, email: true, avatar: true } },
+      select: {
+        ...fullMentorProfileSelect,
+        user: { select: fullUserSelect },
       },
     });
     return res.status(200).json({ count: mentors.length, data: mentors });
@@ -53,7 +90,6 @@ export const getApprovedMentors = async (req: Request, res: Response) => {
   }
 };
 
-// Mentors who have at least one accepted mentee
 export const getAssignedMentors = async (req: Request, res: Response) => {
   try {
     const mentorIds = await prisma.mentorshipRequest.findMany({
@@ -66,12 +102,50 @@ export const getAssignedMentors = async (req: Request, res: Response) => {
     const mentors = await prisma.user.findMany({
       where: { id: { in: ids } },
       select: {
-        id: true, name: true, email: true, avatar: true,
-        mentorProfile: { select: { bio: true, focusArea: true, profilePhotoUrl: true } },
+        ...fullMentorUserSelect,
+        mentorRequests: {
+          where: { status: 'ACCEPTED' },
+          select: {
+            id: true, status: true, createdAt: true,
+            mentee: { select: fullUserSelect },
+          },
+        },
       },
     });
 
     return res.status(200).json({ count: mentors.length, data: mentors });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+export const getMenteesUnderMentor = async (req: Request, res: Response) => {
+  try {
+    const { mentorId } = req.params;
+
+    const mentor = await prisma.user.findUnique({
+      where: { id: String(mentorId) },
+      select: {
+        ...fullMentorUserSelect,
+        mentorRequests: {
+          where: { status: 'ACCEPTED' },
+          select: {
+            id: true, status: true, message: true, createdAt: true,
+            mentee: { select: fullUserSelect },
+          },
+        },
+      },
+    });
+
+    if (!mentor) return res.status(404).json({ message: 'Mentor not found' });
+
+    const mentees = (mentor as any).mentorRequests.map((r: any) => r.mentee);
+
+    return res.status(200).json({
+      mentor: { ...mentor, mentorRequests: undefined },
+      count: mentees.length,
+      mentees,
+    });
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error });
   }
@@ -141,11 +215,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
       where: { role: 'USER' },
-      select: {
-        id: true, name: true, email: true, avatar: true,
-        isVerified: true, nifesZone: true, nifesSchool: true,
-        unit: true, wing: true, courseOfStudy: true, level: true, createdAt: true,
-      },
+      select: fullUserSelect,
     });
     return res.status(200).json({ count: users.length, data: users });
   } catch (error) {
@@ -153,19 +223,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
-// Users who have an accepted mentorship request (assigned to a mentor)
 export const getAssignedUsers = async (req: Request, res: Response) => {
   try {
     const assigned = await prisma.mentorshipRequest.findMany({
       where: { status: 'ACCEPTED' },
       select: {
-        mentee: {
-          select: {
-            id: true, name: true, email: true, avatar: true,
-            nifesSchool: true, courseOfStudy: true, level: true,
-          },
-        },
-        mentor: { select: { id: true, name: true, avatar: true } },
+        id: true, status: true, message: true, createdAt: true,
+        mentee: { select: fullUserSelect },
+        mentor: { select: fullMentorUserSelect },
       },
     });
 
@@ -178,7 +243,6 @@ export const getAssignedUsers = async (req: Request, res: Response) => {
   }
 };
 
-// Users with no accepted mentorship request (not assigned to any mentor)
 export const getUnassignedUsers = async (req: Request, res: Response) => {
   try {
     const assignedMenteeIds = await prisma.mentorshipRequest.findMany({
@@ -191,10 +255,7 @@ export const getUnassignedUsers = async (req: Request, res: Response) => {
 
     const users = await prisma.user.findMany({
       where: { role: 'USER', id: { notIn: ids } },
-      select: {
-        id: true, name: true, email: true, avatar: true,
-        nifesSchool: true, courseOfStudy: true, level: true, createdAt: true,
-      },
+      select: fullUserSelect,
     });
 
     return res.status(200).json({ count: users.length, data: users });
@@ -203,51 +264,33 @@ export const getUnassignedUsers = async (req: Request, res: Response) => {
   }
 };
 
-// Get all mentees assigned to a specific mentor
-export const getMenteesUnderMentor = async (req: Request, res: Response) => {
-  try {
-    const { mentorId } = req.params;
-
-    const requests = await prisma.mentorshipRequest.findMany({
-      where: { mentorId: String(mentorId), status: 'ACCEPTED' },
-      include: {
-        mentee: {
-          select: {
-            id: true, name: true, email: true, avatar: true,
-            nifesSchool: true, courseOfStudy: true, level: true,
-          },
-        },
-      },
-    });
-
-    return res.status(200).json({ count: requests.length, data: requests.map((r) => r.mentee) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Server error', error });
-  }
-};
-
-// Get the mentor assigned to a specific mentee
 export const getMentorOfUser = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const request = await prisma.mentorshipRequest.findFirst({
-      where: { menteeId: String(userId), status: 'ACCEPTED' },
-      include: {
-        mentor: {
+    const user = await prisma.user.findUnique({
+      where: { id: String(userId) },
+      select: {
+        ...fullUserSelect,
+        menteeRequests: {
+          where: { status: 'ACCEPTED' },
           select: {
-            id: true, name: true, email: true, avatar: true,
-            mentorProfile: { select: { bio: true, focusArea: true, profilePhotoUrl: true, isAvailable: true } },
+            id: true, status: true, message: true, createdAt: true,
+            mentor: { select: fullMentorUserSelect },
           },
         },
       },
     });
 
-    if (!request) {
-      return res.status(200).json({ mentor: null, message: 'This user has no assigned mentor' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    return res.status(200).json({ mentor: request.mentor });
+    const request = (user as any).menteeRequests[0];
+
+    return res.status(200).json({
+      user: { ...user, menteeRequests: undefined },
+      mentor: request ? request.mentor : null,
+      assignedSince: request ? request.createdAt : null,
+    });
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error });
   }
@@ -259,7 +302,7 @@ export const getAllAdmins = async (req: Request, res: Response) => {
   try {
     const admins = await prisma.user.findMany({
       where: { role: 'ADMIN' },
-      select: { id: true, name: true, email: true, avatar: true, isVerified: true, createdAt: true },
+      select: fullUserSelect,
     });
     return res.status(200).json({ count: admins.length, data: admins });
   } catch (error) {
@@ -276,7 +319,7 @@ export const promoteToAdmin = async (req: Request, res: Response) => {
     const updated = await prisma.user.update({
       where: { id: String(userId) },
       data: { role: 'ADMIN' },
-      select: { id: true, name: true, email: true, role: true },
+      select: fullUserSelect,
     });
 
     return res.status(200).json({ message: 'User promoted to admin', data: updated });
@@ -320,20 +363,18 @@ export const createProgram = async (req: Request, res: Response) => {
       },
     });
 
-    // Generate QR code as a base64 data URL — no file storage needed
     const qrCodeDataUrl = await QRCode.toDataURL(program.attendanceCode);
 
     return res.status(201).json({
       message: 'Program created successfully',
       data: program,
-      qrCode: qrCodeDataUrl, // base64 PNG — render directly in app/browser
+      qrCode: qrCodeDataUrl,
     });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to create program', details: error });
   }
 };
 
-// Get QR code for an existing program
 export const getProgramQRCode = async (req: Request, res: Response) => {
   try {
     const { programId } = req.params;
@@ -369,7 +410,7 @@ export const getProgramAttendance = async (req: Request, res: Response) => {
     const { programId } = req.params;
     const attendances = await prisma.attendance.findMany({
       where: { programId: String(programId) },
-      include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
+      include: { user: { select: fullUserSelect } },
     });
     return res.status(200).json({ count: attendances.length, data: attendances });
   } catch (error) {
@@ -381,30 +422,18 @@ export const getProgramAttendance = async (req: Request, res: Response) => {
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
-    const assignedMenteeIds = await prisma.mentorshipRequest.findMany({
-      where: { status: 'ACCEPTED' },
-      select: { menteeId: true },
-      distinct: ['menteeId'],
-    });
-
-    const assignedMentorIds = await prisma.mentorshipRequest.findMany({
-      where: { status: 'ACCEPTED' },
-      select: { mentorId: true },
-      distinct: ['mentorId'],
-    });
-
-    const totalUsers = await prisma.user.count({ where: { role: 'USER' } });
-
-    const [totalMentors, pendingMentors, approvedMentors, totalPrograms] = await Promise.all([
+    const [
+      totalUsers, totalMentors, pendingMentors, approvedMentors, totalPrograms,
+      assignedMenteeIds, assignedMentorIds,
+    ] = await Promise.all([
+      prisma.user.count({ where: { role: 'USER' } }),
       prisma.user.count({ where: { role: 'MENTOR' } }),
       prisma.mentorProfile.count({ where: { verificationStatus: 'pending', isOnboardingComplete: true } }),
       prisma.mentorProfile.count({ where: { verificationStatus: 'approved' } }),
       prisma.program.count(),
+      prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { menteeId: true }, distinct: ['menteeId'] }),
+      prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { mentorId: true }, distinct: ['mentorId'] }),
     ]);
-
-    const assignedMentees = assignedMenteeIds.length;
-    const assignedMentors = assignedMentorIds.length;
-    const unassignedMentees = totalUsers - assignedMentees;
 
     return res.status(200).json({
       data: {
@@ -412,9 +441,9 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         totalMentors,
         pendingMentors,
         approvedMentors,
-        assignedMentors,
-        assignedMentees,
-        unassignedMentees,
+        assignedMentors: assignedMentorIds.length,
+        assignedMentees: assignedMenteeIds.length,
+        unassignedMentees: totalUsers - assignedMenteeIds.length,
         totalPrograms,
       },
     });
