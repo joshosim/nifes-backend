@@ -8,6 +8,8 @@ import mentorRoutes from './routes/mentor.routes';
 import adminRoutes from './routes/admin.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import chatRoutes from './routes/chat.routes';
+import mentorshipRoutes from './routes/mentorship.routes';
+import notificationRoutes from './routes/notification.routes';
 import passport from './config/passport';
 import { registerChatHandlers } from './sockets/chat.socket';
 import { createServer } from 'http';
@@ -38,6 +40,8 @@ app.use('/api/mentors', mentorRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/mentorship', mentorshipRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Socket.io
 io.on('connection', (socket) => {

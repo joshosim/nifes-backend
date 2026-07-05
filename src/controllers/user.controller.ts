@@ -22,7 +22,25 @@ export const getMentors = async (req: Request, res: Response) => {
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany();
+    const users = await prisma.user.findMany(
+      {
+        where: { role: 'USER' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar: true,
+          role: true,
+          isVerified: true,
+          nifesZone: true,
+          nifesSchool: true,
+          unit: true,
+          wing: true,
+          courseOfStudy: true,
+          level: true,
+          createdAt: true,
+        },
+      });
     res.json({ users });
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -64,7 +82,22 @@ export const getOneUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
-      where: { id: String(id) }
+      where: { id: String(id) },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        role: true,
+        isVerified: true,
+        nifesZone: true,
+        nifesSchool: true,
+        unit: true,
+        wing: true,
+        courseOfStudy: true,
+        level: true,
+        createdAt: true,
+      },
     });
 
     if (!user) {

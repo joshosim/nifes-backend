@@ -45,9 +45,12 @@ model User {
   savedScriptures     SavedScripture[]
   mentorProfile       MentorProfile?
   attendances         Attendance[]
-  mentorConversations Conversation[]   @relation("MentorConversations")
-  userConversations   Conversation[]   @relation("UserConversations")
-  sentMessages        Message[]        @relation("SentMessages")
+  mentorConversations Conversation[]      @relation("MentorConversations")
+  userConversations   Conversation[]      @relation("UserConversations")
+  sentMessages        Message[]           @relation("SentMessages")
+  menteeRequests      MentorshipRequest[] @relation("MenteeRequests")
+  mentorRequests      MentorshipRequest[] @relation("MentorRequests")
+  notifications       Notification[]
 }
 
 model AnchorWord {
@@ -162,6 +165,41 @@ model MentorProfile {
 // I added this conversation and Message schema for
 // the chatting feature. Each Conversation is between
 // one mentor and one user, and can have multiple messages.
+enum MentorshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model MentorshipRequest {
+  id         String           @id @default(uuid())
+  menteeId   String
+  mentorId   String
+  status     MentorshipStatus @default(PENDING)
+  message    String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  mentee User @relation("MenteeRequests", fields: [menteeId], references: [id], onDelete: Cascade)
+  mentor User @relation("MentorRequests", fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@unique([menteeId, mentorId])
+  @@map("mentorship_requests")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
 model Conversation {
   id        String   @id @default(uuid())
   mentorId  String
