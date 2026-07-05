@@ -19,7 +19,7 @@ const verficationStorage = new multer_storage_cloudinary_1.CloudinaryStorage({
         folder: 'nifes-unity-flow/verification',
         allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
         transformation: [{ width: 500, height: 500, crop: 'limit' }],
-        resource_type: 'auto', //for pdfs
+        resource_type: 'auto', //for pdf
     }
 });
 const profilePicsStorage = new multer_storage_cloudinary_1.CloudinaryStorage({

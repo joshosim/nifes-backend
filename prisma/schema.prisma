@@ -20,13 +20,13 @@ enum Role {
 }
 
 model User {
-  id                  String           @id @default(uuid())
-  email               String           @unique
+  id                  String              @id @default(uuid())
+  email               String              @unique
   password            String?
   avatar              String?
   name                String
   role                Role
-  isVerified          Boolean          @default(false)
+  isVerified          Boolean             @default(false)
   otp                 String?
   otpExpiry           DateTime?
   nifesZone           String?
@@ -35,13 +35,13 @@ model User {
   wing                String?
   courseOfStudy       String?
   level               String?
-  googleId            String?          @unique
-  appleId             String?          @unique
-  authProvider        String           @default("local") // "local" | "google" | "apple"
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  mentorSessions      Session[]        @relation("MentorSessions")
-  userSessions        Session[]        @relation("UserSessions")
+  googleId            String?             @unique
+  appleId             String?             @unique
+  authProvider        String              @default("local") // "local" | "google" | "apple"
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  mentorSessions      Session[]           @relation("MentorSessions")
+  userSessions        Session[]           @relation("UserSessions")
   savedScriptures     SavedScripture[]
   mentorProfile       MentorProfile?
   attendances         Attendance[]
@@ -108,7 +108,7 @@ model Program {
   title          String
   type           ProgramType
   description    String?
-  attendanceCode String      @unique
+  attendanceCode String?     @unique
   startTime      DateTime
   endTime        DateTime
   createdBy      String
@@ -122,11 +122,12 @@ model Program {
 
 model Attendance {
   id        String   @id @default(uuid())
-  userId    String
+  userId    String?
   programId String
+  details   Json?
   createdAt DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@unique([userId, programId])
@@ -172,13 +173,13 @@ enum MentorshipStatus {
 }
 
 model MentorshipRequest {
-  id         String           @id @default(uuid())
-  menteeId   String
-  mentorId   String
-  status     MentorshipStatus @default(PENDING)
-  message    String?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  id        String           @id @default(uuid())
+  menteeId  String
+  mentorId  String
+  status    MentorshipStatus @default(PENDING)
+  message   String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   mentee User @relation("MenteeRequests", fields: [menteeId], references: [id], onDelete: Cascade)
   mentor User @relation("MentorRequests", fields: [mentorId], references: [id], onDelete: Cascade)

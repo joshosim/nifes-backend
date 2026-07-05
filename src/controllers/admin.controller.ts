@@ -351,19 +351,17 @@ export const createProgram = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'title, type, startTime and endTime are required' });
     }
 
-    const attendanceCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
     const program = await prisma.program.create({
       data: {
         title, type, description,
-        attendanceCode,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         createdBy: (req as any).user.id,
       },
     });
 
-    const qrCodeDataUrl = await QRCode.toDataURL(program.attendanceCode);
+    const qrPayload = JSON.stringify({ type: 'program-attendance', programId: program.id });
+    const qrCodeDataUrl = await QRCode.toDataURL(qrPayload);
 
     return res.status(201).json({
       message: 'Program created successfully',
@@ -381,11 +379,11 @@ export const getProgramQRCode = async (req: Request, res: Response) => {
     const program = await prisma.program.findUnique({ where: { id: String(programId) } });
     if (!program) return res.status(404).json({ error: 'Program not found' });
 
-    const qrCodeDataUrl = await QRCode.toDataURL(program.attendanceCode);
+    const qrPayload = JSON.stringify({ type: 'program-attendance', programId: program.id });
+    const qrCodeDataUrl = await QRCode.toDataURL(qrPayload);
     return res.status(200).json({
       programId: program.id,
       title: program.title,
-      attendanceCode: program.attendanceCode,
       qrCode: qrCodeDataUrl,
     });
   } catch (error) {

@@ -1,10 +1,47 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateProfile = exports.getOneUser = exports.getUsers = void 0;
+exports.markAttendance = exports.updateProfile = exports.getOneUser = exports.getOneMentor = exports.getUsers = exports.getMentors = void 0;
 const database_1 = require("../config/database");
+const getMentors = async (req, res) => {
+    try {
+        const mentors = await database_1.prisma.user.findMany({
+            where: { role: 'MENTOR' },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+                mentorProfile: true,
+            },
+        });
+        res.json({ mentors });
+    }
+    catch (error) {
+        console.error('Error fetching mentors:', error);
+        res.status(500).json({ error: 'Failed to fetch mentors' });
+    }
+};
+exports.getMentors = getMentors;
 const getUsers = async (req, res) => {
     try {
-        const users = await database_1.prisma.user.findMany();
+        const users = await database_1.prisma.user.findMany({
+            where: { role: 'USER' },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+                role: true,
+                isVerified: true,
+                nifesZone: true,
+                nifesSchool: true,
+                unit: true,
+                wing: true,
+                courseOfStudy: true,
+                level: true,
+                createdAt: true,
+            },
+        });
         res.json({ users });
     }
     catch (error) {
@@ -13,11 +50,54 @@ const getUsers = async (req, res) => {
     }
 };
 exports.getUsers = getUsers;
+const getOneMentor = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const mentor = await database_1.prisma.user.findUnique({
+            where: { id: String(id) },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+                role: true,
+                mentorProfile: true,
+            },
+        });
+        if (!mentor) {
+            return res.status(404).json({ error: 'Mentor not found' });
+        }
+        if (mentor.role !== 'MENTOR') {
+            return res.status(400).json({ error: 'User is not a mentor' });
+        }
+        res.json({ mentor });
+    }
+    catch (error) {
+        console.error('Error fetching mentor:', error);
+        res.status(500).json({ error: 'Failed to fetch mentor' });
+    }
+};
+exports.getOneMentor = getOneMentor;
 const getOneUser = async (req, res) => {
     try {
         const { id } = req.params;
         const user = await database_1.prisma.user.findUnique({
-            where: { id: String(id) }
+            where: { id: String(id) },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+                role: true,
+                isVerified: true,
+                nifesZone: true,
+                nifesSchool: true,
+                unit: true,
+                wing: true,
+                courseOfStudy: true,
+                level: true,
+                createdAt: true,
+            },
         });
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -79,3 +159,13 @@ const updateProfile = async (req, res) => {
     }
 };
 exports.updateProfile = updateProfile;
+const markAttendance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        //let get to work
+    }
+    catch (error) {
+        console.error("error:", error);
+    }
+};
+exports.markAttendance = markAttendance;

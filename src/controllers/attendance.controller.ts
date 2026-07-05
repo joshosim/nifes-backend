@@ -1,87 +1,145 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
-import crypto from 'crypto';
 
-// Admin: Create a program with attendance code
-export const createProgram = async (req: Request, res: Response) => {
-  try {
-    const { title, type, description, startTime, endTime } = req.body;
+const buildRegistrationDetails = (body: any, user?: any) => {
+  const source = body?.details && typeof body.details === 'object' && !Array.isArray(body.details)
+    ? body.details
+    : {};
 
-    if (!title || !type || !startTime || !endTime) {
-      return res.status(400).json({ error: 'title, type, startTime and endTime are required' });
+  const detailFields = ['name', 'email', 'phone', 'nifesZone', 'nifesSchool', 'unit', 'wing', 'courseOfStudy', 'level'];
+  const details: Record<string, unknown> = {};
+
+  for (const field of detailFields) {
+    const value = source[field] ?? body?.[field];
+    if (value !== undefined && value !== null && value !== '') {
+      details[field] = value;
     }
-
-    // Generate a short unique 8-char attendance code
-    const attendanceCode = crypto.randomBytes(4).toString('hex').toUpperCase();
-
-    const program = await prisma.program.create({
-      data: {
-        title,
-        type,
-        description,
-        attendanceCode,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        createdBy: (req as any).user.id,
-      },
-    });
-
-    return res.status(201).json({
-      message: 'Program created successfully',
-      data: program,
-      attendanceCode: program.attendanceCode,
-    });
-  } catch (error) {
-    console.error('Create program error:', error);
-    return res.status(500).json({ error: 'Failed to create program' });
   }
+
+  if (user) {
+    const fallbackFields = ['name', 'email', 'nifesZone', 'nifesSchool', 'unit', 'wing', 'courseOfStudy', 'level'];
+    for (const field of fallbackFields) {
+      const value = user[field];
+      if (value !== undefined && value !== null && value !== '') {
+        details[field] = details[field] ?? value;
+      }
+    }
+  }
+
+  return Object.keys(details).length > 0 ? details : null;
 };
 
-// Participant: Scan code to mark attendance
-export const markAttendance = async (req: Request, res: Response) => {
-  try {
-    const { attendanceCode } = req.body;
-    const userId = (req as any).user.id;
-
-    if (!attendanceCode) {
-      return res.status(400).json({ error: 'Attendance code is required' });
+const resolveProgramId = (body: any) => {
+  if (body?.programId) return String(body.programId);
+  if (body?.qrPayload) {
+    if (typeof body.qrPayload === 'string' && body.qrPayload.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(body.qrPayload);
+        if (parsed?.programId) return String(parsed.programId);
+      } catch {
+        // fall through to raw handling
+      }
     }
 
-    // Find the program by code
+    if (typeof body.qrPayload === 'string' && body.qrPayload.startsWith('program:')) {
+      return body.qrPayload.replace('program:', '');
+    }
+  }
+
+  if (body?.attendanceCode) return body.attendanceCode;
+  return null;
+};
+
+// Participant: Scan QR or submit program info to mark attendance
+export const markAttendance = async (req: Request, res: Response) => {
+  try {
+    const body = req.body ?? {};
+    const userId = (req as any).user?.id;
+    const mode = body.mode === 'others' ? 'others' : 'self';
+    const programId = resolveProgramId(body);
+
+    if (!programId) {
+      return res.status(400).json({ error: 'Program reference is required' });
+    }
+
     const program = await prisma.program.findUnique({
-      where: { attendanceCode },
+      where: { id: String(programId) },
     });
 
     if (!program) {
-      return res.status(404).json({ error: 'Invalid attendance code' });
+      return res.status(404).json({ error: 'Program not found' });
     }
 
     const now = new Date();
 
-    // Check if code is within valid time window
     if (now < program.startTime) {
       return res.status(400).json({ error: 'Program has not started yet' });
     }
 
     if (now > program.endTime) {
-      return res.status(400).json({ error: 'Attendance code has expired' });
+      return res.status(400).json({ error: 'Attendance registration window has closed' });
     }
 
-    // Check if already marked
-    const existing = await prisma.attendance.findUnique({
-      where: { userId_programId: { userId, programId: program.id } },
+    if (mode === 'self') {
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication is required for self-registration' });
+      }
+
+      const existing = await prisma.attendance.findUnique({
+        where: { userId_programId: { userId, programId: program.id } },
+      });
+
+      if (existing) {
+        return res.status(400).json({ error: 'Attendance already marked for this program' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, nifesZone: true, nifesSchool: true, unit: true, wing: true, courseOfStudy: true, level: true },
+      });
+
+      const attendance = await prisma.attendance.create({
+        data: {
+          userId,
+          programId: program.id,
+          details: buildRegistrationDetails(body, user) as any,
+        },
+      });
+
+      return res.status(201).json({
+        message: `Attendance marked for ${program.title}`,
+        data: attendance,
+      });
+    }
+
+    const registrationDetails = buildRegistrationDetails(body);
+    if (!registrationDetails?.name || !registrationDetails?.email) {
+      return res.status(400).json({ error: 'Name and email are required for other registrations' });
+    }
+
+    const existing = await prisma.attendance.findFirst({
+      where: {
+        programId: program.id,
+        details: {
+          path: ['email'],
+          equals: registrationDetails.email,
+        },
+      },
     });
 
     if (existing) {
-      return res.status(400).json({ error: 'Attendance already marked for this program' });
+      return res.status(400).json({ error: 'Attendance already marked for this person for this program' });
     }
 
     const attendance = await prisma.attendance.create({
-      data: { userId, programId: program.id },
+      data: {
+        programId: program.id,
+        details: registrationDetails as any,
+      },
     });
 
     return res.status(201).json({
-      message: `Attendance marked for ${program.title}`,
+      message: `Attendance registered for ${program.title}`,
       data: attendance,
     });
   } catch (error) {

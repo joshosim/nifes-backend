@@ -14,6 +14,9 @@ const register = async (req, res) => {
         if (!name || !email || !password || !role) {
             return res.status(400).json({ error: 'Name, email, password, and role are required' });
         }
+        if (role === 'ADMIN') {
+            return res.status(403).json({ error: 'Cannot register as admin' });
+        }
         const existingUser = await database_1.prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(400).json({ error: 'User with this email already exists' });
