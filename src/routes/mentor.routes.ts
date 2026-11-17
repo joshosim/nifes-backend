@@ -1,5 +1,7 @@
 
 import express from "express";
+import multer from "multer";
+import { ErrorRequestHandler } from "express";
 const router = express.Router();
 const { authMiddleware } = require("../middleware/auth.middleware");
 import { requireSelfMentor } from "../middleware/mentor-approval.middleware";
@@ -11,6 +13,14 @@ const {
   getOnboardingStatus,
 } = require("../controllers/mentor.controller");
 
+const handleVerificationUploadError: ErrorRequestHandler = (error, _req, res, next) => {
+  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({ message: "Verification file must be 10 MB or smaller" });
+    return;
+  }
+  next(error);
+};
+
 router.get("/:userId/status", authMiddleware, requireSelfMentor, getOnboardingStatus);
 
 router.post(
@@ -18,6 +28,7 @@ router.post(
   authMiddleware,
   requireSelfMentor,
   uploadVerification.single("verificationFile"),
+  handleVerificationUploadError,
   saveVerificationDetails
 );
 

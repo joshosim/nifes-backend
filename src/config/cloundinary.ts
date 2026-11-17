@@ -37,7 +37,10 @@ const teachingMediaStorage = new CloudinaryStorage({
   } as any,
 });
 
-const uploadVerification = multer({ storage: verficationStorage });
+const uploadVerification = multer({
+  storage: verficationStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 const uploadProfilePics = multer({ storage: profilePicsStorage });
 const uploadTeachingMedia = multer({ storage: teachingMediaStorage });
 

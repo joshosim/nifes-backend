@@ -38,7 +38,10 @@ const teachingMediaStorage = new multer_storage_cloudinary_1.CloudinaryStorage({
         allowed_formats: ['mp4', 'mov', 'webm', 'mp3', 'wav', 'm4a', 'aac'],
     },
 });
-const uploadVerification = (0, multer_1.default)({ storage: verficationStorage });
+const uploadVerification = (0, multer_1.default)({
+    storage: verficationStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+});
 exports.uploadVerification = uploadVerification;
 const uploadProfilePics = (0, multer_1.default)({ storage: profilePicsStorage });
 exports.uploadProfilePics = uploadProfilePics;
