@@ -102,6 +102,7 @@ enum FocusArea {
   SPIRITUAL
   CAREER
   MENTAL_HEALTH
+  LEADERSHIP
 }
 
 enum ProgramType {

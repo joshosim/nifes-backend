@@ -4,7 +4,12 @@ import { prisma } from '../config/database';
 export const getMentors = async (req: Request, res: Response) => {
   try {
     const mentors = await prisma.user.findMany({
-      where: { role: 'MENTOR' },
+      where: {
+        role: 'MENTOR',
+        mentorProfile: {
+          is: { verificationStatus: 'approved', isOnboardingComplete: true },
+        },
+      },
       select: {
         id: true,
         name: true,
@@ -69,6 +74,12 @@ export const getOneMentor = async (req: Request, res: Response) => {
 
     if (mentor.role !== 'MENTOR') {
       return res.status(400).json({ error: 'User is not a mentor' });
+    }
+    if (
+      mentor.mentorProfile?.verificationStatus !== 'approved' ||
+      !mentor.mentorProfile.isOnboardingComplete
+    ) {
+      return res.status(404).json({ error: 'Mentor not found' });
     }
 
     res.json({ mentor });

@@ -1,14 +1,15 @@
-const { PrismaClient } = require("@prisma/client");
 import { Request, Response } from 'express';
-const prisma = new PrismaClient();
+import { FocusArea } from '@prisma/client';
+import { prisma } from '../config/database';
 
 // ─── STEP 1: Verification Details ───────────────────────────
 const saveVerificationDetails = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = String(req.params.userId);
     const { fellowshipPosition, campus } = req.body;
 
-    if (!fellowshipPosition || !campus) {
+    if (typeof fellowshipPosition !== 'string' || !fellowshipPosition.trim() ||
+        typeof campus !== 'string' || !campus.trim()) {
       return res.status(400).json({ message: "Fellowship position and campus are required" });
     }
 
@@ -19,20 +20,29 @@ const saveVerificationDetails = async (req: Request, res: Response) => {
     // Cloudinary returns the URL on req.file.path
     const verificationFileUrl = req.file.path;
 
+    const existing = await prisma.mentorProfile.findUnique({ where: { userId } });
+    if (existing?.verificationStatus === 'approved') {
+      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
+    }
+
+    const normalizedPosition = fellowshipPosition.trim().toUpperCase().replace(/\s+/g, "_");
     const mentor = await prisma.mentorProfile.upsert({
       where: { userId },
       update: {
-        fellowshipPosition: fellowshipPosition.toUpperCase().replace(" ", "_"),
-        campus,
+        fellowshipPosition: normalizedPosition,
+        campus: campus.trim(),
         verificationFileUrl,
         onboardingStep: 2,
+        isOnboardingComplete: false,
+        verificationStatus: "pending",
       },
       create: {
         userId,
-        fellowshipPosition: fellowshipPosition.toUpperCase().replace(" ", "_"),
-        campus,
+        fellowshipPosition: normalizedPosition,
+        campus: campus.trim(),
         verificationFileUrl,
         onboardingStep: 2,
+        verificationStatus: "pending",
       },
     });
 
@@ -50,16 +60,34 @@ const saveVerificationDetails = async (req: Request, res: Response) => {
 // ─── STEP 2: Profile Setup ───────────────────────────────────
 const saveProfileSetup = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = String(req.params.userId);
     const { bio, focusArea } = req.body;
 
-    if (!bio || !focusArea) {
+    if (typeof bio !== 'string' || !bio.trim() ||
+        typeof focusArea !== 'string' || !focusArea.trim()) {
       return res.status(400).json({ message: "Bio and focus area are required" });
     }
 
     const existing = await prisma.mentorProfile.findUnique({ where: { userId } });
     if (!existing || existing.onboardingStep < 2) {
       return res.status(400).json({ message: "Please complete step 1 first" });
+    }
+    if (existing.verificationStatus === 'approved') {
+      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
+    }
+
+    const normalizedFocusArea = focusArea.trim().toUpperCase().replace(/\s+/g, "_");
+    const focusAreaAliases: Record<string, FocusArea> = {
+      ACADEMICS: FocusArea.ACADEMICS,
+      SPIRITUAL: FocusArea.SPIRITUAL,
+      SPIRITUAL_GROWTH: FocusArea.SPIRITUAL,
+      CAREER: FocusArea.CAREER,
+      MENTAL_HEALTH: FocusArea.MENTAL_HEALTH,
+      LEADERSHIP: FocusArea.LEADERSHIP,
+    };
+    const focusAreaValue = focusAreaAliases[normalizedFocusArea];
+    if (!focusAreaValue) {
+      return res.status(400).json({ message: "Select a valid focus area" });
     }
 
     // Profile photo is optional (user might skip changing it)
@@ -68,8 +96,8 @@ const saveProfileSetup = async (req: Request, res: Response) => {
     const mentor = await prisma.mentorProfile.update({
       where: { userId },
       data: {
-        bio,
-        focusArea: focusArea,
+        bio: bio.trim(),
+        focusArea: focusAreaValue,
         profilePhotoUrl,
         onboardingStep: 3,
       },
@@ -89,7 +117,7 @@ const saveProfileSetup = async (req: Request, res: Response) => {
 // ─── STEP 3: Mentor Availability ─────────────────────────────
 const saveMentorAvailability = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = String(req.params.userId);
     const { isAvailable, availableDays, availableTimeStart, availableTimeEnd } = req.body;
 
     if (!availableDays || !Array.isArray(availableDays) || availableDays.length === 0) {
@@ -104,6 +132,12 @@ const saveMentorAvailability = async (req: Request, res: Response) => {
     if (!existing || existing.onboardingStep < 3) {
       return res.status(400).json({ message: "Please complete previous steps first" });
     }
+    if (existing.verificationStatus === 'approved') {
+      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
+    }
+    if (typeof isAvailable !== 'undefined' && typeof isAvailable !== 'boolean') {
+      return res.status(400).json({ message: "Availability must be a boolean" });
+    }
 
     const mentor = await prisma.mentorProfile.update({
       where: { userId },
@@ -114,6 +148,7 @@ const saveMentorAvailability = async (req: Request, res: Response) => {
         availableTimeEnd,
         onboardingStep: 4,
         isOnboardingComplete: true,
+        verificationStatus: "pending",
       },
     });
 
@@ -130,16 +165,22 @@ const saveMentorAvailability = async (req: Request, res: Response) => {
 // ─── GET: Onboarding Status ───────────────────────────────────
 const getOnboardingStatus = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = String(req.params.userId);
     const mentor = await prisma.mentorProfile.findUnique({ where: { userId } });
 
     if (!mentor) {
-      return res.status(200).json({ step: 1, isOnboardingComplete: false, data: null });
+      return res.status(200).json({
+        step: 1,
+        isOnboardingComplete: false,
+        verificationStatus: null,
+        data: null,
+      });
     }
 
     return res.status(200).json({
       step: mentor.onboardingStep,
       isOnboardingComplete: mentor.isOnboardingComplete,
+      verificationStatus: mentor.verificationStatus,
       data: mentor,
     });
   } catch (error) {

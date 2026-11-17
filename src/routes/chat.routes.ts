@@ -7,11 +7,13 @@ import {
   markAsRead,
 } from '../controllers/chat.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { requireMentorApprovalForChat } from '../middleware/mentor-approval.middleware';
 import { RequestHandler } from 'express';
 
 const router = Router();
 
 router.use(authMiddleware as RequestHandler); // protect all chat routes
+router.use(requireMentorApprovalForChat);
 
 router.get('/conversations/:userId', getConversations);
 router.get('/conversations/:conversationId/messages', getMessages);

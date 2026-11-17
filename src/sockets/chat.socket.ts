@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { prisma } from '../config/database';
 import jwt from 'jsonwebtoken';
+import { isMentorApproved } from '../middleware/mentor-approval.middleware';
 
 interface SendMessagePayload {
   conversationId: string;
@@ -34,9 +35,32 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
   }
 
   // Client joins a conversation room when they open a chat
-  socket.on('join_conversation', (conversationId: string) => {
-    socket.join(conversationId);
-    console.log(`Socket ${socket.id} joined room ${conversationId}`);
+  socket.on('join_conversation', async (conversationId: string) => {
+    try {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { mentorId: true, userId: true },
+      });
+
+      if (!conversation) {
+        socket.emit('error', { message: 'Conversation not found' });
+        return;
+      }
+      if (conversation.mentorId !== authenticatedUserId && conversation.userId !== authenticatedUserId) {
+        socket.emit('error', { message: 'Not a participant' });
+        return;
+      }
+      if (!(await isMentorApproved(conversation.mentorId))) {
+        socket.emit('error', { message: 'Mentor approval is required to use chat' });
+        return;
+      }
+
+      socket.join(conversationId);
+      console.log(`Socket ${socket.id} joined room ${conversationId}`);
+    } catch (error) {
+      console.error('join_conversation socket error:', error);
+      socket.emit('error', { message: 'Failed to join conversation' });
+    }
   });
 
   socket.on('leave_conversation', (conversationId: string) => {
@@ -70,6 +94,10 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
         socket.emit('error', { message: 'Not a participant' });
         return;
       }
+      if (!(await isMentorApproved(conversation.mentorId))) {
+        socket.emit('error', { message: 'Mentor approval is required to use chat' });
+        return;
+      }
 
       const [message] = await prisma.$transaction([
         prisma.message.create({
@@ -96,6 +124,7 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
   socket.on('typing', (payload: TypingPayload) => {
     const { conversationId, isTyping } = payload;
     const userId = authenticatedUserId!;
+    if (!socket.rooms.has(conversationId)) return;
     // Broadcast to the room EXCEPT the sender
     socket.to(conversationId).emit('typing', { userId, isTyping });
   });
@@ -106,6 +135,24 @@ export const registerChatHandlers = (io: Server, socket: Socket) => {
     const userId = authenticatedUserId!;
 
     try {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { mentorId: true, userId: true },
+      });
+
+      if (!conversation) {
+        socket.emit('error', { message: 'Conversation not found' });
+        return;
+      }
+      if (conversation.mentorId !== userId && conversation.userId !== userId) {
+        socket.emit('error', { message: 'Not a participant' });
+        return;
+      }
+      if (!(await isMentorApproved(conversation.mentorId))) {
+        socket.emit('error', { message: 'Mentor approval is required to use chat' });
+        return;
+      }
+
       await prisma.message.updateMany({
         where: {
           conversationId,

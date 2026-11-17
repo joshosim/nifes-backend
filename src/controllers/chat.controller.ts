@@ -1,15 +1,29 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { isMentorApproved } from '../middleware/mentor-approval.middleware';
+
+const getAuthenticatedUser = (req: Request) => (req as AuthRequest).user!;
 
 // GET /chat/conversations/:userId
 // Returns all conversations for a user (as mentor or mentee), latest message first
 export const getConversations = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const authenticatedUserId = getAuthenticatedUser(req).id;
+
+    if (String(userId) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'You can only view your own conversations' });
+    }
 
     const conversations = await prisma.conversation.findMany({
       where: {
         OR: [{ mentorId: String(userId) }, { userId: String(userId) }],
+        mentor: {
+          mentorProfile: {
+            is: { verificationStatus: 'approved', isOnboardingComplete: true },
+          },
+        },
       },
       include: {
         mentor: {
@@ -54,6 +68,21 @@ export const getMessages = async (req: Request, res: Response) => {
     const { conversationId } = req.params;
     const { cursor, limit = '20' } = req.query;
     const take = Math.min(Number(limit), 50); // cap at 50
+    const userId = getAuthenticatedUser(req).id;
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: String(conversationId) },
+      select: { mentorId: true, userId: true },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+    if (conversation.mentorId !== userId && conversation.userId !== userId) {
+      return res.status(403).json({ message: 'You are not part of this conversation' });
+    }
+    if (!(await isMentorApproved(conversation.mentorId))) {
+      return res.status(403).json({ message: 'This mentor is not approved for chat' });
+    }
 
     const messages = await prisma.message.findMany({
       where: { conversationId: String(conversationId) },
@@ -90,6 +119,7 @@ export const getMessages = async (req: Request, res: Response) => {
 export const getOrCreateConversation = async (req: Request, res: Response) => {
   try {
     const { mentorId, userId } = req.body;
+    const authenticatedUser = getAuthenticatedUser(req);
 
     if (!mentorId || !userId) {
       return res.status(400).json({ message: 'mentorId and userId are required' });
@@ -97,6 +127,12 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
 
     if (mentorId === userId) {
       return res.status(400).json({ message: 'Mentor and user cannot be the same person' });
+    }
+    if (
+      (authenticatedUser.role === 'USER' && authenticatedUser.id !== userId) ||
+      (authenticatedUser.role === 'MENTOR' && authenticatedUser.id !== mentorId)
+    ) {
+      return res.status(403).json({ message: 'You can only start a conversation for your account' });
     }
 
     // Verify both users exist and mentor has the right role
@@ -108,7 +144,10 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
     if (!mentor || mentor.role !== 'MENTOR') {
       return res.status(404).json({ message: 'Mentor not found' });
     }
-    if (!user) {
+    if (!(await isMentorApproved(mentorId))) {
+      return res.status(403).json({ message: 'Mentor approval is required to start a conversation' });
+    }
+    if (!user || user.role !== 'USER') {
       return res.status(404).json({ message: 'User not found' });
     }
 
@@ -134,7 +173,8 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
 export const sendMessage = async (req: Request, res: Response) => {
   try {
     const { conversationId } = req.params;
-    const { senderId, content } = req.body;
+    const { content } = req.body;
+    const senderId = getAuthenticatedUser(req).id;
 
     if (!senderId || !content?.trim()) {
       return res.status(400).json({ message: 'senderId and content are required' });
@@ -154,6 +194,9 @@ export const sendMessage = async (req: Request, res: Response) => {
 
     if (!isParticipant) {
       return res.status(403).json({ message: 'You are not part of this conversation' });
+    }
+    if (!(await isMentorApproved(conversation.mentorId))) {
+      return res.status(403).json({ message: 'This mentor is not approved for chat' });
     }
 
     const [message] = await prisma.$transaction([
@@ -182,7 +225,21 @@ export const sendMessage = async (req: Request, res: Response) => {
 export const markAsRead = async (req: Request, res: Response) => {
   try {
     const { conversationId } = req.params;
-    const { userId } = req.body;
+    const userId = getAuthenticatedUser(req).id;
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: String(conversationId) },
+      select: { mentorId: true, userId: true },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+    if (conversation.mentorId !== userId && conversation.userId !== userId) {
+      return res.status(403).json({ message: 'You are not part of this conversation' });
+    }
+    if (!(await isMentorApproved(conversation.mentorId))) {
+      return res.status(403).json({ message: 'This mentor is not approved for chat' });
+    }
 
     await prisma.message.updateMany({
       where: {
