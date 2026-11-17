@@ -1,5 +1,4 @@
 require("dotenv").config();
-console.log("TOKEN:", process.env.MAILTRAP_TOKEN);
 
 import { MailtrapTransport } from "mailtrap";
 import nodemailer from "nodemailer";
