@@ -421,24 +421,35 @@ export const getProgramAttendance = async (req: Request, res: Response) => {
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
     const [
-      totalUsers, totalMentors, pendingMentors, approvedMentors, totalPrograms,
+      totalUsers, totalMentors, pendingMentors, approvedMentors, totalPrograms, activeSessions,
       assignedMenteeIds, assignedMentorIds,
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'USER' } }),
       prisma.user.count({ where: { role: 'MENTOR' } }),
       prisma.mentorProfile.count({ where: { verificationStatus: 'pending', isOnboardingComplete: true } }),
       prisma.mentorProfile.count({ where: { verificationStatus: 'approved' } }),
-      prisma.program.count(),
+      prisma.adminConference.count(),
+      prisma.recordedSession.count({ where: { status: 'published' } }),
       prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { menteeId: true }, distinct: ['menteeId'] }),
       prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { mentorId: true }, distinct: ['mentorId'] }),
     ]);
 
     return res.status(200).json({
+      totalMentors,
+      totalUsers,
+      totalMentees: totalUsers,
+      totalPrograms,
+      activeSessions,
+      pendingMentors,
+      pendingApprovals: pendingMentors,
       data: {
         totalUsers,
+        totalMentees: totalUsers,
         totalMentors,
         pendingMentors,
+        pendingApprovals: pendingMentors,
         approvedMentors,
+        activeSessions,
         assignedMentors: assignedMentorIds.length,
         assignedMentees: assignedMenteeIds.length,
         unassignedMentees: totalUsers - assignedMenteeIds.length,

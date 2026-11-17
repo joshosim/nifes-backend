@@ -28,10 +28,21 @@ const profilePicsStorage = new CloudinaryStorage({
   } as any
 });
 
+const teachingMediaStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'nifes-unity-flow/teaching-media',
+    resource_type: 'auto',
+    allowed_formats: ['mp4', 'mov', 'webm', 'mp3', 'wav', 'm4a', 'aac'],
+  } as any,
+});
+
 const uploadVerification = multer({ storage: verficationStorage });
 const uploadProfilePics = multer({ storage: profilePicsStorage });
+const uploadTeachingMedia = multer({ storage: teachingMediaStorage });
 
 export {
   uploadVerification,
   uploadProfilePics,
+  uploadTeachingMedia,
 };

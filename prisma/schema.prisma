@@ -20,37 +20,46 @@ enum Role {
 }
 
 model User {
-  id                  String              @id @default(uuid())
-  email               String              @unique
-  password            String?
-  avatar              String?
-  name                String
-  role                Role
-  isVerified          Boolean             @default(false)
-  otp                 String?
-  otpExpiry           DateTime?
-  nifesZone           String?
-  nifesSchool         String?
-  unit                String?
-  wing                String?
-  courseOfStudy       String?
-  level               String?
-  googleId            String?             @unique
-  appleId             String?             @unique
-  authProvider        String              @default("local") // "local" | "google" | "apple"
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  mentorSessions      Session[]           @relation("MentorSessions")
-  userSessions        Session[]           @relation("UserSessions")
-  savedScriptures     SavedScripture[]
-  mentorProfile       MentorProfile?
-  attendances         Attendance[]
-  mentorConversations Conversation[]      @relation("MentorConversations")
-  userConversations   Conversation[]      @relation("UserConversations")
-  sentMessages        Message[]           @relation("SentMessages")
-  menteeRequests      MentorshipRequest[] @relation("MenteeRequests")
-  mentorRequests      MentorshipRequest[] @relation("MentorRequests")
-  notifications       Notification[]
+  id                      String              @id @default(uuid())
+  email                   String              @unique
+  password                String?
+  avatar                  String?
+  name                    String
+  phone                   String?
+  designation             String?
+  profilePhotoUrl         String?
+  notificationPreferences Json?
+  role                    Role
+  isVerified              Boolean             @default(false)
+  otp                     String?
+  otpExpiry               DateTime?
+  nifesZone               String?
+  nifesSchool             String?
+  unit                    String?
+  wing                    String?
+  courseOfStudy           String?
+  level                   String?
+  googleId                String?             @unique
+  appleId                 String?             @unique
+  authProvider            String              @default("local") // "local" | "google" | "apple"
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  mentorSessions          Session[]           @relation("MentorSessions")
+  userSessions            Session[]           @relation("UserSessions")
+  savedScriptures         SavedScripture[]
+  mentorProfile           MentorProfile?
+  attendances             Attendance[]
+  mentorConversations     Conversation[]      @relation("MentorConversations")
+  userConversations       Conversation[]      @relation("UserConversations")
+  sentMessages            Message[]           @relation("SentMessages")
+  menteeRequests          MentorshipRequest[] @relation("MenteeRequests")
+  mentorRequests          MentorshipRequest[] @relation("MentorRequests")
+  notifications           Notification[]
+  conferenceMentorships   ConferenceMentor[]
+  conferenceMentees       ConferenceMentee[]
+  facilitatedGroups       AdminGroup[]
+  groupMemberships        AdminGroupMember[]
+  recordedSessions        RecordedSession[]
 }
 
 model AnchorWord {
@@ -148,6 +157,8 @@ model MentorProfile {
   // Step 2 - Profile Setup
   profilePhotoUrl String?
   bio             String?
+  affiliation     String?
+  focusAreas      String[]   @default([])
   focusArea       FocusArea?
 
   // Step 3 - Availability
@@ -161,6 +172,80 @@ model MentorProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AdminConference {
+  id        String             @id @default(uuid())
+  name      String
+  year      Int
+  zone      String
+  startDate DateTime
+  endDate   DateTime
+  details   String?
+  status    String             @default("draft")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  mentors   ConferenceMentor[]
+  mentees   ConferenceMentee[]
+  groups    AdminGroup[]
+}
+
+model ConferenceMentor {
+  conferenceId String
+  mentorId     String
+  conference   AdminConference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  mentor       User            @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@id([conferenceId, mentorId])
+}
+
+model ConferenceMentee {
+  conferenceId String
+  menteeId     String
+  conference   AdminConference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  mentee       User            @relation(fields: [menteeId], references: [id], onDelete: Cascade)
+
+  @@id([conferenceId, menteeId])
+}
+
+model AdminGroup {
+  id            String             @id @default(uuid())
+  conferenceId  String
+  name          String
+  facilitatorId String?
+  conference    AdminConference    @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  facilitator   User?              @relation(fields: [facilitatorId], references: [id], onDelete: SetNull)
+  members       AdminGroupMember[]
+
+  @@unique([conferenceId, name])
+}
+
+model AdminGroupMember {
+  groupId  String
+  menteeId String
+  group    AdminGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  mentee   User       @relation(fields: [menteeId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, menteeId])
+}
+
+model RecordedSession {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  series       String?
+  mentorId     String?
+  contentType  String
+  duration     String?
+  keyTakeaways String[] @default([])
+  status       String   @default("draft")
+  thumbnailUrl String?
+  mediaUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  mentor       User?    @relation(fields: [mentorId], references: [id], onDelete: SetNull)
+
+  @@index([mentorId])
 }
 
 // I added this conversation and Message schema for
