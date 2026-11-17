@@ -21,8 +21,11 @@ const saveVerificationDetails = async (req: Request, res: Response) => {
     const verificationFileUrl = req.file.path;
 
     const existing = await prisma.mentorProfile.findUnique({ where: { userId } });
-    if (existing?.verificationStatus === 'approved') {
-      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
+    if (
+      existing?.isOnboardingComplete &&
+      existing.verificationStatus !== 'rejected'
+    ) {
+      return res.status(409).json({ message: "Your completed application cannot be changed while it is under review or approved" });
     }
 
     const normalizedPosition = fellowshipPosition.trim().toUpperCase().replace(/\s+/g, "_");
@@ -69,11 +72,8 @@ const saveProfileSetup = async (req: Request, res: Response) => {
     }
 
     const existing = await prisma.mentorProfile.findUnique({ where: { userId } });
-    if (!existing || existing.onboardingStep < 2) {
+    if (!existing || existing.onboardingStep < 2 || existing.isOnboardingComplete) {
       return res.status(400).json({ message: "Please complete step 1 first" });
-    }
-    if (existing.verificationStatus === 'approved') {
-      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
     }
 
     const normalizedFocusArea = focusArea.trim().toUpperCase().replace(/\s+/g, "_");
@@ -120,20 +120,27 @@ const saveMentorAvailability = async (req: Request, res: Response) => {
     const userId = String(req.params.userId);
     const { isAvailable, availableDays, availableTimeStart, availableTimeEnd } = req.body;
 
-    if (!availableDays || !Array.isArray(availableDays) || availableDays.length === 0) {
+    const validDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    if (
+      !Array.isArray(availableDays) ||
+      availableDays.length === 0 ||
+      availableDays.some((day) => typeof day !== 'string' || !validDays.includes(day))
+    ) {
       return res.status(400).json({ message: "At least one available day is required" });
     }
 
-    if (!availableTimeStart || !availableTimeEnd) {
+    if (
+      typeof availableTimeStart !== 'string' ||
+      !/^\d{2}:\d{2}$/.test(availableTimeStart) ||
+      typeof availableTimeEnd !== 'string' ||
+      !/^\d{2}:\d{2}$/.test(availableTimeEnd)
+    ) {
       return res.status(400).json({ message: "Available time range is required" });
     }
 
     const existing = await prisma.mentorProfile.findUnique({ where: { userId } });
-    if (!existing || existing.onboardingStep < 3) {
+    if (!existing || existing.onboardingStep < 3 || existing.isOnboardingComplete) {
       return res.status(400).json({ message: "Please complete previous steps first" });
-    }
-    if (existing.verificationStatus === 'approved') {
-      return res.status(409).json({ message: "Approved mentor applications cannot be changed" });
     }
     if (typeof isAvailable !== 'undefined' && typeof isAvailable !== 'boolean') {
       return res.status(400).json({ message: "Availability must be a boolean" });

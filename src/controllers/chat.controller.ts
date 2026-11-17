@@ -177,7 +177,7 @@ export const sendMessage = async (req: Request, res: Response) => {
     const senderId = getAuthenticatedUser(req).id;
 
     if (!senderId || !content?.trim()) {
-      return res.status(400).json({ message: 'senderId and content are required' });
+      return res.status(400).json({ message: 'content is required' });
     }
 
     // Verify sender belongs to this conversation

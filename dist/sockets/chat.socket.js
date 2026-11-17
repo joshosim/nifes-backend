@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerChatHandlers = void 0;
 const database_1 = require("../config/database");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const mentor_approval_middleware_1 = require("../middleware/mentor-approval.middleware");
 const registerChatHandlers = (io, socket) => {
     // Verify JWT on connection
     const token = socket.handshake.auth?.token;
@@ -20,9 +21,31 @@ const registerChatHandlers = (io, socket) => {
         return;
     }
     // Client joins a conversation room when they open a chat
-    socket.on('join_conversation', (conversationId) => {
-        socket.join(conversationId);
-        console.log(`Socket ${socket.id} joined room ${conversationId}`);
+    socket.on('join_conversation', async (conversationId) => {
+        try {
+            const conversation = await database_1.prisma.conversation.findUnique({
+                where: { id: conversationId },
+                select: { mentorId: true, userId: true },
+            });
+            if (!conversation) {
+                socket.emit('error', { message: 'Conversation not found' });
+                return;
+            }
+            if (conversation.mentorId !== authenticatedUserId && conversation.userId !== authenticatedUserId) {
+                socket.emit('error', { message: 'Not a participant' });
+                return;
+            }
+            if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+                socket.emit('error', { message: 'Mentor approval is required to use chat' });
+                return;
+            }
+            socket.join(conversationId);
+            console.log(`Socket ${socket.id} joined room ${conversationId}`);
+        }
+        catch (error) {
+            console.error('join_conversation socket error:', error);
+            socket.emit('error', { message: 'Failed to join conversation' });
+        }
     });
     socket.on('leave_conversation', (conversationId) => {
         socket.leave(conversationId);
@@ -46,6 +69,10 @@ const registerChatHandlers = (io, socket) => {
             const isParticipant = conversation.mentorId === senderId || conversation.userId === senderId;
             if (!isParticipant) {
                 socket.emit('error', { message: 'Not a participant' });
+                return;
+            }
+            if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+                socket.emit('error', { message: 'Mentor approval is required to use chat' });
                 return;
             }
             const [message] = await database_1.prisma.$transaction([
@@ -72,6 +99,8 @@ const registerChatHandlers = (io, socket) => {
     socket.on('typing', (payload) => {
         const { conversationId, isTyping } = payload;
         const userId = authenticatedUserId;
+        if (!socket.rooms.has(conversationId))
+            return;
         // Broadcast to the room EXCEPT the sender
         socket.to(conversationId).emit('typing', { userId, isTyping });
     });
@@ -80,6 +109,22 @@ const registerChatHandlers = (io, socket) => {
         const { conversationId } = payload;
         const userId = authenticatedUserId;
         try {
+            const conversation = await database_1.prisma.conversation.findUnique({
+                where: { id: conversationId },
+                select: { mentorId: true, userId: true },
+            });
+            if (!conversation) {
+                socket.emit('error', { message: 'Conversation not found' });
+                return;
+            }
+            if (conversation.mentorId !== userId && conversation.userId !== userId) {
+                socket.emit('error', { message: 'Not a participant' });
+                return;
+            }
+            if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+                socket.emit('error', { message: 'Mentor approval is required to use chat' });
+                return;
+            }
             await database_1.prisma.message.updateMany({
                 where: {
                     conversationId,

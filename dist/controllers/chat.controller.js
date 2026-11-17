@@ -2,14 +2,25 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.markAsRead = exports.sendMessage = exports.getOrCreateConversation = exports.getMessages = exports.getConversations = void 0;
 const database_1 = require("../config/database");
+const mentor_approval_middleware_1 = require("../middleware/mentor-approval.middleware");
+const getAuthenticatedUser = (req) => req.user;
 // GET /chat/conversations/:userId
 // Returns all conversations for a user (as mentor or mentee), latest message first
 const getConversations = async (req, res) => {
     try {
         const { userId } = req.params;
+        const authenticatedUserId = getAuthenticatedUser(req).id;
+        if (String(userId) !== authenticatedUserId) {
+            return res.status(403).json({ message: 'You can only view your own conversations' });
+        }
         const conversations = await database_1.prisma.conversation.findMany({
             where: {
                 OR: [{ mentorId: String(userId) }, { userId: String(userId) }],
+                mentor: {
+                    mentorProfile: {
+                        is: { verificationStatus: 'approved', isOnboardingComplete: true },
+                    },
+                },
             },
             include: {
                 mentor: {
@@ -51,6 +62,20 @@ const getMessages = async (req, res) => {
         const { conversationId } = req.params;
         const { cursor, limit = '20' } = req.query;
         const take = Math.min(Number(limit), 50); // cap at 50
+        const userId = getAuthenticatedUser(req).id;
+        const conversation = await database_1.prisma.conversation.findUnique({
+            where: { id: String(conversationId) },
+            select: { mentorId: true, userId: true },
+        });
+        if (!conversation) {
+            return res.status(404).json({ message: 'Conversation not found' });
+        }
+        if (conversation.mentorId !== userId && conversation.userId !== userId) {
+            return res.status(403).json({ message: 'You are not part of this conversation' });
+        }
+        if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+            return res.status(403).json({ message: 'This mentor is not approved for chat' });
+        }
         const messages = await database_1.prisma.message.findMany({
             where: { conversationId: String(conversationId) },
             orderBy: { createdAt: 'desc' },
@@ -85,11 +110,16 @@ exports.getMessages = getMessages;
 const getOrCreateConversation = async (req, res) => {
     try {
         const { mentorId, userId } = req.body;
+        const authenticatedUser = getAuthenticatedUser(req);
         if (!mentorId || !userId) {
             return res.status(400).json({ message: 'mentorId and userId are required' });
         }
         if (mentorId === userId) {
             return res.status(400).json({ message: 'Mentor and user cannot be the same person' });
+        }
+        if ((authenticatedUser.role === 'USER' && authenticatedUser.id !== userId) ||
+            (authenticatedUser.role === 'MENTOR' && authenticatedUser.id !== mentorId)) {
+            return res.status(403).json({ message: 'You can only start a conversation for your account' });
         }
         // Verify both users exist and mentor has the right role
         const [mentor, user] = await Promise.all([
@@ -99,7 +129,10 @@ const getOrCreateConversation = async (req, res) => {
         if (!mentor || mentor.role !== 'MENTOR') {
             return res.status(404).json({ message: 'Mentor not found' });
         }
-        if (!user) {
+        if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(mentorId))) {
+            return res.status(403).json({ message: 'Mentor approval is required to start a conversation' });
+        }
+        if (!user || user.role !== 'USER') {
             return res.status(404).json({ message: 'User not found' });
         }
         const conversation = await database_1.prisma.conversation.upsert({
@@ -124,9 +157,10 @@ exports.getOrCreateConversation = getOrCreateConversation;
 const sendMessage = async (req, res) => {
     try {
         const { conversationId } = req.params;
-        const { senderId, content } = req.body;
+        const { content } = req.body;
+        const senderId = getAuthenticatedUser(req).id;
         if (!senderId || !content?.trim()) {
-            return res.status(400).json({ message: 'senderId and content are required' });
+            return res.status(400).json({ message: 'content is required' });
         }
         // Verify sender belongs to this conversation
         const conversation = await database_1.prisma.conversation.findUnique({
@@ -138,6 +172,9 @@ const sendMessage = async (req, res) => {
         const isParticipant = conversation.mentorId === senderId || conversation.userId === senderId;
         if (!isParticipant) {
             return res.status(403).json({ message: 'You are not part of this conversation' });
+        }
+        if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+            return res.status(403).json({ message: 'This mentor is not approved for chat' });
         }
         const [message] = await database_1.prisma.$transaction([
             database_1.prisma.message.create({
@@ -165,7 +202,20 @@ exports.sendMessage = sendMessage;
 const markAsRead = async (req, res) => {
     try {
         const { conversationId } = req.params;
-        const { userId } = req.body;
+        const userId = getAuthenticatedUser(req).id;
+        const conversation = await database_1.prisma.conversation.findUnique({
+            where: { id: String(conversationId) },
+            select: { mentorId: true, userId: true },
+        });
+        if (!conversation) {
+            return res.status(404).json({ message: 'Conversation not found' });
+        }
+        if (conversation.mentorId !== userId && conversation.userId !== userId) {
+            return res.status(403).json({ message: 'You are not part of this conversation' });
+        }
+        if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(conversation.mentorId))) {
+            return res.status(403).json({ message: 'This mentor is not approved for chat' });
+        }
         await database_1.prisma.message.updateMany({
             where: {
                 conversationId: String(conversationId),

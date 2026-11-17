@@ -2,15 +2,23 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMenteesByMentor = exports.getMyMentees = exports.respondToRequest = exports.getMentorIncomingRequests = exports.getMenteeRequestStatus = exports.sendRequest = void 0;
 const database_1 = require("../config/database");
+const mentor_approval_middleware_1 = require("../middleware/mentor-approval.middleware");
 const getUser = (req) => req.user;
 const sendRequest = async (req, res) => {
     try {
-        const menteeId = getUser(req).id;
+        const user = getUser(req);
+        if (user.role !== 'USER') {
+            return res.status(403).json({ error: 'Only mentees can request a mentor' });
+        }
+        const menteeId = user.id;
         const mentorId = String(req.params.mentorId);
         const { message } = req.body;
         const mentor = await database_1.prisma.user.findUnique({ where: { id: mentorId } });
         if (!mentor || mentor.role !== 'MENTOR') {
             return res.status(404).json({ error: 'Mentor not found' });
+        }
+        if (!(await (0, mentor_approval_middleware_1.isMentorApproved)(mentorId))) {
+            return res.status(403).json({ error: 'This mentor is not approved yet' });
         }
         if (menteeId === mentorId) {
             return res.status(400).json({ error: 'You cannot request yourself' });

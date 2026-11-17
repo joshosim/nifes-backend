@@ -410,21 +410,32 @@ exports.getProgramAttendance = getProgramAttendance;
 // ─── DASHBOARD STATS ─────────────────────────────────────────
 const getDashboardStats = async (req, res) => {
     try {
-        const [totalUsers, totalMentors, pendingMentors, approvedMentors, totalPrograms, assignedMenteeIds, assignedMentorIds,] = await Promise.all([
+        const [totalUsers, totalMentors, pendingMentors, approvedMentors, totalPrograms, activeSessions, assignedMenteeIds, assignedMentorIds,] = await Promise.all([
             database_1.prisma.user.count({ where: { role: 'USER' } }),
             database_1.prisma.user.count({ where: { role: 'MENTOR' } }),
             database_1.prisma.mentorProfile.count({ where: { verificationStatus: 'pending', isOnboardingComplete: true } }),
             database_1.prisma.mentorProfile.count({ where: { verificationStatus: 'approved' } }),
-            database_1.prisma.program.count(),
+            database_1.prisma.adminConference.count(),
+            database_1.prisma.recordedSession.count({ where: { status: 'published' } }),
             database_1.prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { menteeId: true }, distinct: ['menteeId'] }),
             database_1.prisma.mentorshipRequest.findMany({ where: { status: 'ACCEPTED' }, select: { mentorId: true }, distinct: ['mentorId'] }),
         ]);
         return res.status(200).json({
+            totalMentors,
+            totalUsers,
+            totalMentees: totalUsers,
+            totalPrograms,
+            activeSessions,
+            pendingMentors,
+            pendingApprovals: pendingMentors,
             data: {
                 totalUsers,
+                totalMentees: totalUsers,
                 totalMentors,
                 pendingMentors,
+                pendingApprovals: pendingMentors,
                 approvedMentors,
+                activeSessions,
                 assignedMentors: assignedMentorIds.length,
                 assignedMentees: assignedMenteeIds.length,
                 unassignedMentees: totalUsers - assignedMenteeIds.length,

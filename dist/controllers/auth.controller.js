@@ -124,6 +124,7 @@ const login = async (req, res) => {
         res.json({
             message: 'Login successful!',
             token,
+            ...(user.role === 'ADMIN' ? { admin: { id: user.id, name: user.name, email: user.email, role: 'Super Admin' } } : {}),
             user: {
                 id: user.id,
                 name: user.name,
