@@ -3,11 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.appleLogin = exports.google0AuthCallback = exports.resetPassword = exports.requestNewOTP = exports.login = exports.verifyOTP = exports.register = void 0;
+exports.appleLogin = exports.google0AuthCallback = exports.resetPassword = exports.requestPasswordReset = exports.requestNewOTP = exports.login = exports.verifyOTP = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const otp_1 = require("../utils/otp");
 const database_1 = require("../config/database");
+const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const passwordResetRequests = new Map();
+const passwordResetAttempts = new Map();
+const passwordResetRequestMessage = 'If an account exists for that email, a password reset code has been sent.';
 const register = async (req, res) => {
     try {
         const { name, email, password, role } = req.body;
@@ -165,18 +171,96 @@ const requestNewOTP = async (req, res) => {
     }
 };
 exports.requestNewOTP = requestNewOTP;
+const requestPasswordReset = async (req, res) => {
+    try {
+        const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        const normalizedEmail = email.toLowerCase();
+        const now = Date.now();
+        for (const [key, requestedAt] of passwordResetRequests) {
+            if (now - requestedAt >= PASSWORD_RESET_REQUEST_COOLDOWN_MS) {
+                passwordResetRequests.delete(key);
+            }
+        }
+        const user = await database_1.prisma.user.findUnique({ where: { email } });
+        if (user?.isVerified) {
+            const lastRequest = passwordResetRequests.get(normalizedEmail);
+            if (lastRequest === undefined ||
+                now - lastRequest >= PASSWORD_RESET_REQUEST_COOLDOWN_MS) {
+                const otp = (0, otp_1.generateOTP)();
+                const hashedOtp = await bcryptjs_1.default.hash(otp, 10);
+                const otpExpiry = new Date(now + PASSWORD_RESET_CODE_TTL_MS);
+                await database_1.prisma.user.update({
+                    where: { id: user.id },
+                    data: { otp: hashedOtp, otpExpiry },
+                });
+                await (0, otp_1.sendOTP)(user.email, otp, 'password_reset');
+                passwordResetRequests.set(normalizedEmail, now);
+                passwordResetAttempts.delete(normalizedEmail);
+            }
+        }
+        return res.json({ message: passwordResetRequestMessage });
+    }
+    catch (error) {
+        console.error('Request password reset error:', error);
+        return res.status(500).json({ error: 'Failed to request password reset' });
+    }
+};
+exports.requestPasswordReset = requestPasswordReset;
 const resetPassword = async (req, res) => {
     try {
-        const { email, newPassword } = req.body;
-        if (!email || !newPassword) {
+        const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+        const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+        const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+        if (!email || !otp || !newPassword) {
             return res.status(400).json({
-                error: 'Email and new password are required'
+                error: 'Email, reset code, and new password are required',
             });
         }
-        //lets check if the user exist first so we can change the password
+        if (newPassword.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+        const invalidCodeResponse = {
+            error: 'The reset code is invalid or expired. Request a new code and try again.',
+        };
         const user = await database_1.prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+        const now = Date.now();
+        const normalizedEmail = user?.email.toLowerCase() ?? email.toLowerCase();
+        const currentAttempts = passwordResetAttempts.get(normalizedEmail);
+        if (currentAttempts && currentAttempts.expiresAt > now) {
+            if (currentAttempts.count >= PASSWORD_RESET_MAX_ATTEMPTS) {
+                return res.status(429).json({
+                    error: 'Too many incorrect reset codes. Request a new code.',
+                });
+            }
+        }
+        else if (currentAttempts) {
+            passwordResetAttempts.delete(normalizedEmail);
+        }
+        if (!user?.isVerified ||
+            !user.otp ||
+            !user.otpExpiry ||
+            user.otpExpiry.getTime() <= now) {
+            passwordResetAttempts.delete(normalizedEmail);
+            return res.status(400).json(invalidCodeResponse);
+        }
+        if (!(await bcryptjs_1.default.compare(otp, user.otp))) {
+            const count = currentAttempts?.expiresAt === user.otpExpiry.getTime()
+                ? currentAttempts.count + 1
+                : 1;
+            if (count >= PASSWORD_RESET_MAX_ATTEMPTS) {
+                await database_1.prisma.user.update({
+                    where: { id: user.id },
+                    data: { otp: null, otpExpiry: null },
+                });
+            }
+            passwordResetAttempts.set(normalizedEmail, {
+                count,
+                expiresAt: user.otpExpiry.getTime(),
+            });
+            return res.status(400).json(invalidCodeResponse);
         }
         const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
         await database_1.prisma.user.update({
@@ -187,6 +271,8 @@ const resetPassword = async (req, res) => {
                 otpExpiry: null,
             }
         });
+        passwordResetAttempts.delete(normalizedEmail);
+        passwordResetRequests.delete(normalizedEmail);
         res.json({
             message: 'Password reset successfully!',
         });

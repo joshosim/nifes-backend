@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+import { randomInt } from "crypto";
 import { MailtrapTransport } from "mailtrap";
 import nodemailer from "nodemailer";
 
@@ -10,10 +11,16 @@ const transport = nodemailer.createTransport(
 );
 
 export const generateOTP = (): string => {
-  return Math.floor(10000 + Math.random() * 90000).toString();
+  return randomInt(100_000, 1_000_000).toString();
 };
 
-export const sendOTP = async (email: string, otp: string) => {
+export const sendOTP = async (
+  email: string,
+  otp: string,
+  purpose: "verification" | "password_reset" = "verification",
+) => {
+  const isPasswordReset = purpose === "password_reset";
+
   try {
     const info = await transport.sendMail({
       from: {
@@ -21,12 +28,14 @@ export const sendOTP = async (email: string, otp: string) => {
         name: "Nifes Unity Flow",
       },
       to: [email],
-      subject: "Your OTP Code",
+      subject: isPasswordReset
+        ? "Reset your NIFES Unity Flow password"
+        : "Your OTP Code",
       html: `
         <div style="font-family: Arial, sans-serif; background:#f4f6f8; padding:40px 0;">
           <div style="max-width:500px; margin:auto; background:white; border-radius:8px; padding:30px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.05);">
-            <h2 style="margin-bottom:10px; color:#333;">Verify Your Account</h2>
-            <p style="color:#555; font-size:15px;">Use the verification code below to continue.</p>
+            <h2 style="margin-bottom:10px; color:#333;">${isPasswordReset ? "Reset Your Password" : "Verify Your Account"}</h2>
+            <p style="color:#555; font-size:15px;">Use the ${isPasswordReset ? "password reset" : "verification"} code below to continue.</p>
 
             <div style="margin:25px 0; font-size:28px; letter-spacing:6px; font-weight:bold; background:#f1f5f9; padding:15px; border-radius:6px; color:#111;">
               ${otp}
@@ -52,5 +61,6 @@ export const sendOTP = async (email: string, otp: string) => {
     console.log("✅ Email sent:", info);
   } catch (error) {
     console.error("❌ Email failed:", error);
+    throw error;
   }
 };

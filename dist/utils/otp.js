@@ -5,17 +5,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendOTP = exports.generateOTP = void 0;
 require("dotenv").config();
-console.log("TOKEN:", process.env.MAILTRAP_TOKEN);
+const crypto_1 = require("crypto");
 const mailtrap_1 = require("mailtrap");
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const transport = nodemailer_1.default.createTransport((0, mailtrap_1.MailtrapTransport)({
     token: process.env.MAILTRAP_TOKEN,
 }));
 const generateOTP = () => {
-    return Math.floor(10000 + Math.random() * 90000).toString();
+    return (0, crypto_1.randomInt)(100000, 1000000).toString();
 };
 exports.generateOTP = generateOTP;
-const sendOTP = async (email, otp) => {
+const sendOTP = async (email, otp, purpose = "verification") => {
+    const isPasswordReset = purpose === "password_reset";
     try {
         const info = await transport.sendMail({
             from: {
@@ -23,12 +24,14 @@ const sendOTP = async (email, otp) => {
                 name: "Nifes Unity Flow",
             },
             to: [email],
-            subject: "Your OTP Code",
+            subject: isPasswordReset
+                ? "Reset your NIFES Unity Flow password"
+                : "Your OTP Code",
             html: `
         <div style="font-family: Arial, sans-serif; background:#f4f6f8; padding:40px 0;">
           <div style="max-width:500px; margin:auto; background:white; border-radius:8px; padding:30px; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.05);">
-            <h2 style="margin-bottom:10px; color:#333;">Verify Your Account</h2>
-            <p style="color:#555; font-size:15px;">Use the verification code below to continue.</p>
+            <h2 style="margin-bottom:10px; color:#333;">${isPasswordReset ? "Reset Your Password" : "Verify Your Account"}</h2>
+            <p style="color:#555; font-size:15px;">Use the ${isPasswordReset ? "password reset" : "verification"} code below to continue.</p>
 
             <div style="margin:25px 0; font-size:28px; letter-spacing:6px; font-weight:bold; background:#f1f5f9; padding:15px; border-radius:6px; color:#111;">
               ${otp}
@@ -54,6 +57,7 @@ const sendOTP = async (email, otp) => {
     }
     catch (error) {
         console.error("❌ Email failed:", error);
+        throw error;
     }
 };
 exports.sendOTP = sendOTP;

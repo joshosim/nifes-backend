@@ -49,6 +49,7 @@ router.post('/register', auth_controller_1.register);
 router.post('/verify-otp', auth_controller_1.verifyOTP);
 router.post('/login', auth_controller_1.login);
 router.post('/request-new-otp', auth_controller_1.requestNewOTP);
+router.post('/request-password-reset', auth_controller_1.requestPasswordReset);
 router.post('/reset-password', auth_controller_1.resetPassword);
 router.get('/google', requireGoogleOAuthConfig, passport_1.default.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback', requireGoogleOAuthConfig, passport_1.default.authenticate('google', { session: false, failureRedirect: '/login' }), auth_controller_1.google0AuthCallback);

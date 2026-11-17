@@ -1,7 +1,7 @@
 import { RequestHandler, Router } from 'express';
 import {
   register, login,
-  verifyOTP, requestNewOTP,
+  verifyOTP, requestNewOTP, requestPasswordReset,
   resetPassword,
   google0AuthCallback, appleLogin
 } from '../controllers/auth.controller';
@@ -22,6 +22,7 @@ router.post('/register', register);
 router.post('/verify-otp', verifyOTP);
 router.post('/login', login);
 router.post('/request-new-otp', requestNewOTP);
+router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 router.get('/google', requireGoogleOAuthConfig, passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback',

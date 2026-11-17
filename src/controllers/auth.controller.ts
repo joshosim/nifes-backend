@@ -4,6 +4,14 @@ import jwt from 'jsonwebtoken';
 import { generateOTP, sendOTP } from '../utils/otp';
 import { prisma } from '../config/database';
 
+const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const passwordResetRequests = new Map<string, number>();
+const passwordResetAttempts = new Map<string, { count: number; expiresAt: number }>();
+const passwordResetRequestMessage =
+  'If an account exists for that email, a password reset code has been sent.';
+
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
@@ -193,21 +201,113 @@ export const requestNewOTP = async (req: Request, res: Response) => {
   }
 };
 
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const now = Date.now();
+    for (const [key, requestedAt] of passwordResetRequests) {
+      if (now - requestedAt >= PASSWORD_RESET_REQUEST_COOLDOWN_MS) {
+        passwordResetRequests.delete(key);
+      }
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user?.isVerified) {
+      const lastRequest = passwordResetRequests.get(normalizedEmail);
+      if (
+        lastRequest === undefined ||
+        now - lastRequest >= PASSWORD_RESET_REQUEST_COOLDOWN_MS
+      ) {
+        const otp = generateOTP();
+        const hashedOtp = await bcrypt.hash(otp, 10);
+        const otpExpiry = new Date(now + PASSWORD_RESET_CODE_TTL_MS);
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { otp: hashedOtp, otpExpiry },
+        });
+        await sendOTP(user.email, otp, 'password_reset');
+        passwordResetRequests.set(normalizedEmail, now);
+        passwordResetAttempts.delete(normalizedEmail);
+      }
+    }
+
+    return res.json({ message: passwordResetRequestMessage });
+  } catch (error) {
+    console.error('Request password reset error:', error);
+    return res.status(500).json({ error: 'Failed to request password reset' });
+  }
+};
+
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const { email, newPassword } = req.body;
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+    const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+    const newPassword =
+      typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
 
-    if (!email || !newPassword) {
+    if (!email || !otp || !newPassword) {
       return res.status(400).json({
-        error: 'Email and new password are required'
+        error: 'Email, reset code, and new password are required',
       });
     }
 
-    //lets check if the user exist first so we can change the password
-    const user = await prisma.user.findUnique({ where: { email } });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    const invalidCodeResponse = {
+      error: 'The reset code is invalid or expired. Request a new code and try again.',
+    };
+    const user = await prisma.user.findUnique({ where: { email } });
+    const now = Date.now();
+    const normalizedEmail = user?.email.toLowerCase() ?? email.toLowerCase();
+    const currentAttempts = passwordResetAttempts.get(normalizedEmail);
+
+    if (currentAttempts && currentAttempts.expiresAt > now) {
+      if (currentAttempts.count >= PASSWORD_RESET_MAX_ATTEMPTS) {
+        return res.status(429).json({
+          error: 'Too many incorrect reset codes. Request a new code.',
+        });
+      }
+    } else if (currentAttempts) {
+      passwordResetAttempts.delete(normalizedEmail);
+    }
+
+    if (
+      !user?.isVerified ||
+      !user.otp ||
+      !user.otpExpiry ||
+      user.otpExpiry.getTime() <= now
+    ) {
+      passwordResetAttempts.delete(normalizedEmail);
+      return res.status(400).json(invalidCodeResponse);
+    }
+
+    if (!(await bcrypt.compare(otp, user.otp))) {
+      const count =
+        currentAttempts?.expiresAt === user.otpExpiry.getTime()
+          ? currentAttempts.count + 1
+          : 1;
+
+      if (count >= PASSWORD_RESET_MAX_ATTEMPTS) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { otp: null, otpExpiry: null },
+        });
+      }
+
+      passwordResetAttempts.set(normalizedEmail, {
+        count,
+        expiresAt: user.otpExpiry.getTime(),
+      });
+      return res.status(400).json(invalidCodeResponse);
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -220,6 +320,8 @@ export const resetPassword = async (req: Request, res: Response) => {
         otpExpiry: null,
       }
     });
+    passwordResetAttempts.delete(normalizedEmail);
+    passwordResetRequests.delete(normalizedEmail);
 
     res.json({
       message: 'Password reset successfully!',
