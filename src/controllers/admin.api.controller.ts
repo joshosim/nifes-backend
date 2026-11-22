@@ -22,14 +22,14 @@ export const addMentor = async (req: Request, res: Response) => {
 };
 
 function formatMentor(m: any) {
-  return { id: m.id, name: m.name, email: m.email, phone: m.phone, verificationStatus: m.mentorProfile?.verificationStatus ?? 'pending', availabilityStatus: m.mentorProfile?.isAvailable ? 'Active' : 'Inactive', focusAreas: m.mentorProfile?.focusAreas ?? [], affiliation: m.mentorProfile?.affiliation ?? m.mentorProfile?.campus, profilePhotoUrl: m.mentorProfile?.profilePhotoUrl ?? m.profilePhotoUrl ?? m.avatar, createdAt: m.createdAt };
+  return { id: m.id, name: m.name, email: m.email, phone: m.phone, verificationStatus: m.mentorProfile?.verificationStatus ?? 'pending', isOnboardingComplete: m.mentorProfile?.isOnboardingComplete ?? false, availabilityStatus: m.mentorProfile?.isAvailable ? 'Active' : 'Inactive', focusAreas: m.mentorProfile?.focusAreas ?? [], affiliation: m.mentorProfile?.affiliation ?? m.mentorProfile?.campus, profilePhotoUrl: m.mentorProfile?.profilePhotoUrl ?? m.profilePhotoUrl ?? m.avatar, createdAt: m.createdAt };
 }
 
 export const getMentorTable = async (_: Request, res: Response) => {
   try { const rows = await db.user.findMany({ where: { role: 'MENTOR' }, include: { mentorProfile: true }, orderBy: { createdAt: 'desc' } }); return res.json({ mentors: rows.map(formatMentor) }); } catch (e) { return err(res, e); }
 };
 export const getMentorTableByStatus = (status: string) => async (_: Request, res: Response) => {
-  try { const rows = await db.user.findMany({ where: { role: 'MENTOR', mentorProfile: { verificationStatus: status } }, include: { mentorProfile: true }, orderBy: { createdAt: 'desc' } }); return res.json({ mentors: rows.map(formatMentor) }); } catch (e) { return err(res, e); }
+  try { const rows = await db.user.findMany({ where: { role: 'MENTOR', mentorProfile: { verificationStatus: status, ...(status === 'pending' ? { isOnboardingComplete: true } : {}) } }, include: { mentorProfile: true }, orderBy: { createdAt: 'desc' } }); return res.json({ mentors: rows.map(formatMentor) }); } catch (e) { return err(res, e); }
 };
 export const getAdminUsers = async (_: Request, res: Response) => {
   try { const rows = await db.user.findMany({ where: { role: 'USER' }, select: userSelect, orderBy: { createdAt: 'desc' } }); return res.json({ users: rows.map((u: any) => ({ ...u, school: u.nifesSchool, profileImage: u.profilePhotoUrl ?? u.avatar })) }); } catch (e) { return err(res, e); }

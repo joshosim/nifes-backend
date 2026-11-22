@@ -3,11 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.appleLogin = exports.google0AuthCallback = exports.resetPassword = exports.requestPasswordReset = exports.requestNewOTP = exports.login = exports.verifyOTP = exports.register = void 0;
+exports.appleLogin = exports.getCurrentUser = exports.google0AuthCallback = exports.resetPassword = exports.requestPasswordReset = exports.requestNewOTP = exports.login = exports.verifyOTP = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const otp_1 = require("../utils/otp");
 const database_1 = require("../config/database");
+const AUTH_COOKIE = 'unityflow_token';
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
@@ -292,22 +293,73 @@ const google0AuthCallback = async (req, res) => {
             return res.status(401).json({ error: 'Google authentication failed' });
         }
         const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role ?? 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        return res.status(200).json({
+        const loginResponse = {
             message: 'Google login successful',
             token,
-            user: sanitizeUser(user)
+            user: sanitizeUser(user),
+        };
+        if (!(req.get('accept') ?? '').includes('text/html')) {
+            return res.status(200).json(loginResponse);
+        }
+        const frontendOrigin = new URL(process.env.GOOGLE_FRONTEND_URL ?? 'http://localhost:3000');
+        if (!['http:', 'https:'].includes(frontendOrigin.protocol)) {
+            return res.status(500).json({ error: 'Google frontend URL must use HTTP or HTTPS' });
+        }
+        const cookieDomain = process.env.AUTH_COOKIE_DOMAIN;
+        res.cookie(AUTH_COOKIE, token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         });
+        return res.redirect(new URL('/auth/google/complete', frontendOrigin).toString());
     }
     catch (error) {
         return res.status(500).json({ error: 'Server error during Google callback' });
     }
 };
 exports.google0AuthCallback = google0AuthCallback;
+const getCurrentUser = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+        const user = await database_1.prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                avatar: true,
+                nifesZone: true,
+                nifesSchool: true,
+                unit: true,
+                wing: true,
+                courseOfStudy: true,
+                level: true,
+            },
+        });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        return res.json({ user });
+    }
+    catch (error) {
+        console.error('Get current user error:', error);
+        return res.status(500).json({ error: 'Unable to load current user' });
+    }
+};
+exports.getCurrentUser = getCurrentUser;
 // ── Helper: safe user response (no sensitive fields) ─────────
 const sanitizeUser = (user) => ({
     id: user.id,
     email: user.email,
     name: user.name,
+    role: user.role,
     avatar: user.avatar,
     authProvider: user.authProvider,
 });

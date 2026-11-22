@@ -6,7 +6,7 @@ const mentor_approval_middleware_1 = require("../middleware/mentor-approval.midd
 const role_middleware_1 = require("../middleware/role.middleware");
 const router = (0, express_1.Router)();
 const { authMiddleware } = require('../middleware/auth.middleware');
-router.post('/request/:mentorId', authMiddleware, (0, role_middleware_1.requireRole)('USER'), mentorship_controller_1.sendRequest);
+router.post('/request/:mentorId', authMiddleware, (0, role_middleware_1.requireRole)('USER'), mentorship_controller_1.rejectMenteeRequest);
 router.get('/my-requests', authMiddleware, (0, role_middleware_1.requireRole)('USER'), mentorship_controller_1.getMenteeRequestStatus);
 router.get('/incoming', authMiddleware, mentor_approval_middleware_1.requireApprovedMentor, mentorship_controller_1.getMentorIncomingRequests);
 router.patch('/request/:requestId/respond', authMiddleware, mentor_approval_middleware_1.requireApprovedMentor, mentorship_controller_1.respondToRequest);

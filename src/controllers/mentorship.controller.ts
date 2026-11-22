@@ -1,55 +1,12 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
-import { isMentorApproved } from '../middleware/mentor-approval.middleware';
 
 const getUser = (req: Request) => (req as Request & {
   user?: { id: string; email: string; role: string };
 }).user!;
 
-export const sendRequest = async (req: Request, res: Response) => {
-  try {
-    const user = getUser(req);
-    if (user.role !== 'USER') {
-      return res.status(403).json({ error: 'Only mentees can request a mentor' });
-    }
-    const menteeId = user.id;
-    const mentorId = String(req.params.mentorId);
-    const { message } = req.body;
-
-    const mentor = await prisma.user.findUnique({ where: { id: mentorId } });
-    if (!mentor || mentor.role !== 'MENTOR') {
-      return res.status(404).json({ error: 'Mentor not found' });
-    }
-    if (!(await isMentorApproved(mentorId))) {
-      return res.status(403).json({ error: 'This mentor is not approved yet' });
-    }
-    if (menteeId === mentorId) {
-      return res.status(400).json({ error: 'You cannot request yourself' });
-    }
-
-    const existing = await prisma.mentorshipRequest.findUnique({
-      where: { menteeId_mentorId: { menteeId, mentorId } },
-    });
-    if (existing) {
-      return res.status(409).json({ error: 'Request already sent', status: existing.status });
-    }
-
-    const mentee = await prisma.user.findUnique({ where: { id: menteeId }, select: { name: true } });
-
-    const request = await prisma.mentorshipRequest.create({ data: { menteeId, mentorId, message } });
-    await prisma.notification.create({
-      data: {
-        userId: mentorId,
-        title: 'New Mentorship Request',
-        body: `${mentee!.name} has requested you as a mentor.`,
-      },
-    });
-
-    return res.status(201).json({ message: 'Request sent', data: request });
-  } catch (error) {
-    return res.status(500).json({ error: 'Server error', details: error });
-  }
-};
+export const rejectMenteeRequest = (_req: Request, res: Response) =>
+  res.status(403).json({ error: 'Mentees cannot initiate mentorship requests.' });
 
 export const getMenteeRequestStatus = async (req: Request, res: Response) => {
   try {

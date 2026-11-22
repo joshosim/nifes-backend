@@ -4,10 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isGoogleOAuthConfigured = void 0;
-const client_1 = require("@prisma/client");
 const passport_1 = __importDefault(require("passport"));
 const passport_google_oauth20_1 = require("passport-google-oauth20");
-const prisma = new client_1.PrismaClient();
+const database_1 = require("./database");
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL;
@@ -17,47 +16,71 @@ if (exports.isGoogleOAuthConfigured) {
         clientID: googleClientId,
         clientSecret: googleClientSecret,
         callbackURL: googleCallbackUrl,
-    }, async (accessToken, refreshToken, profile, done) => {
+        passReqToCallback: true,
+    }, async (req, accessToken, refreshToken, profile, done) => {
+        const verifiedEmail = profile.emails
+            ?.find((email) => email.verified)
+            ?.value.trim()
+            .toLowerCase();
+        const googleId = profile.id.trim();
+        if (!verifiedEmail) {
+            return done(null, false, { code: 'GOOGLE_EMAIL_NOT_VERIFIED' });
+        }
+        if (!googleId) {
+            return done(null, false, { code: 'GOOGLE_ID_MISSING' });
+        }
         try {
-            const email = profile.emails?.[0]?.value;
-            const name = profile.displayName;
+            const name = profile.displayName.trim() || verifiedEmail.split('@')[0];
             const avatar = profile.photos?.[0]?.value;
-            const googleId = profile.id;
-            if (!email) {
-                return done(new Error('No email from Google'), undefined);
-            }
-            // Check if user already exists by googleId or email
-            let user = await prisma.user.findFirst({
-                where: {
-                    OR: [{ googleId }, { email }],
-                },
-            });
-            if (user) {
-                // If exists by email but no googleId yet, link the account
-                if (!user.googleId) {
-                    user = await prisma.user.update({
-                        where: { id: user.id },
-                        data: { googleId, authProvider: 'google', avatar },
-                    });
+            const state = typeof req.query.state === 'string' ? req.query.state : '';
+            const requestedRole = state.endsWith('.MENTOR') ? 'MENTOR' : 'USER';
+            const [linkedUser, emailMatches] = await Promise.all([
+                database_1.prisma.user.findUnique({ where: { googleId } }),
+                database_1.prisma.user.findMany({
+                    where: { email: { equals: verifiedEmail, mode: 'insensitive' } },
+                    take: 2,
+                }),
+            ]);
+            if (linkedUser) {
+                if (emailMatches.some((user) => user.id !== linkedUser.id)) {
+                    return done(null, false, { code: 'GOOGLE_ACCOUNT_LINK_CONFLICT' });
                 }
+                return done(null, linkedUser);
             }
-            else {
-                //to create a new user if not exists
-                user = await prisma.user.create({
+            if (emailMatches.length > 1) {
+                return done(null, false, { code: 'GOOGLE_ACCOUNT_LINK_CONFLICT' });
+            }
+            const existingUser = emailMatches[0];
+            if (existingUser) {
+                if (existingUser.googleId && existingUser.googleId !== googleId) {
+                    return done(null, false, { code: 'GOOGLE_ACCOUNT_LINK_CONFLICT' });
+                }
+                const user = await database_1.prisma.user.update({
+                    where: { id: existingUser.id },
                     data: {
-                        email,
-                        name,
-                        avatar,
                         googleId,
-                        authProvider: 'google',
-                        role: 'USER'
+                        isVerified: true,
+                        avatar: existingUser.avatar ?? avatar,
+                        authProvider: existingUser.password ? existingUser.authProvider : 'google',
                     },
                 });
+                return done(null, user);
             }
+            const user = await database_1.prisma.user.create({
+                data: {
+                    email: verifiedEmail,
+                    name,
+                    avatar,
+                    googleId,
+                    authProvider: 'google',
+                    role: requestedRole,
+                    isVerified: true,
+                },
+            });
             return done(null, user);
         }
         catch (error) {
-            return done(error, undefined);
+            return done(error);
         }
     }));
 }

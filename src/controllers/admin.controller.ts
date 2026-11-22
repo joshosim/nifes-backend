@@ -157,6 +157,9 @@ export const approveMentor = async (req: Request, res: Response) => {
 
     const existing = await prisma.mentorProfile.findUnique({ where: { userId: String(userId) } });
     if (!existing) return res.status(404).json({ message: 'Mentor profile not found' });
+    if (!existing.isOnboardingComplete) {
+      return res.status(409).json({ message: 'Mentor must complete onboarding before approval' });
+    }
 
     const [mentor] = await prisma.$transaction([
       prisma.mentorProfile.update({
