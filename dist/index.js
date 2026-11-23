@@ -15,6 +15,8 @@ const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"
 const chat_routes_1 = __importDefault(require("./routes/chat.routes"));
 const mentorship_routes_1 = __importDefault(require("./routes/mentorship.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
+const conference_routes_1 = __importDefault(require("./routes/conference.routes"));
+const session_routes_1 = __importDefault(require("./routes/session.routes"));
 const passport_1 = __importDefault(require("./config/passport"));
 const chat_socket_1 = require("./sockets/chat.socket");
 const http_1 = require("http");
@@ -42,6 +44,8 @@ app.use('/api/attendance', attendance_routes_1.default);
 app.use('/api/chat', chat_routes_1.default);
 app.use('/api/mentorship', mentorship_routes_1.default);
 app.use('/api/notifications', notification_routes_1.default);
+app.use('/api/conferences', conference_routes_1.default);
+app.use('/api/sessions', session_routes_1.default);
 // Socket.io
 io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);

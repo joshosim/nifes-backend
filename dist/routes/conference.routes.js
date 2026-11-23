@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const conference_controller_1 = require("../controllers/conference.controller");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const router = (0, express_1.Router)();
+router.use(auth_middleware_1.authMiddleware);
+router.get('/', conference_controller_1.getOpenConferences);
+router.post('/:id/register', conference_controller_1.registerForConference);
+router.get('/groups/me', conference_controller_1.getMyGroups);
+router.patch('/groups/:groupId/whatsapp', conference_controller_1.updateMyGroupWhatsAppLink);
+exports.default = router;

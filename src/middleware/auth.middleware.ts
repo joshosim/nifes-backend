@@ -1,7 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 
-export interface AuthRequest extends Request {
+export interface AuthRequest {
+  headers: Request['headers'];
   user?: {
     id: string;
     email: string;
@@ -9,11 +10,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authMiddleware = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void => {
+export const authMiddleware: RequestHandler = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
 
@@ -23,7 +20,7 @@ export const authMiddleware = (
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    req.user = decoded;
+    (req as AuthRequest).user = decoded;
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired token' });

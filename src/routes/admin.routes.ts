@@ -27,7 +27,7 @@ import {
 } from '../controllers/admin.controller';
 import {
   addMentor, getMentorTable, getMentorTableByStatus, getAdminUsers, getUsersByAssignment,
-  getConferenceList, createConference, conferenceDetail, archiveConference, conferencePeople,
+  getConferenceList, createConference, publishConference, conferenceDetail, archiveConference, conferencePeople,
   getGroups, createGroup, updateGroup, randomAssign, confirmAssignments, conferenceReport,
   getRecordedSessions, createRecordedSession, updateRecordedSession, deleteRecordedSession,
   publishRecordedSession, setSessionAsset, getAdminProfile, updateAdminProfile,
@@ -61,6 +61,7 @@ router.get('/programs', getConferenceList);
 router.post('/programs', createConference);
 router.get('/programs/:id', conferenceDetail);
 router.patch('/programs/:id/archive', archiveConference);
+router.patch('/programs/:id/publish', publishConference);
 router.get('/programs/:id/mentors', conferencePeople('mentors'));
 router.get('/programs/:id/mentees', conferencePeople('mentees'));
 router.get('/programs/:id/groups', getGroups);

@@ -39,6 +39,7 @@ model User {
   wing                    String?
   courseOfStudy           String?
   level                   String?
+  gender                  String?
   googleId                String?             @unique
   appleId                 String?             @unique
   authProvider            String              @default("local") // "local" | "google" | "apple"
@@ -214,6 +215,7 @@ model AdminGroup {
   conferenceId  String
   name          String
   facilitatorId String?
+  whatsappUrl   String?
   conference    AdminConference    @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
   facilitator   User?              @relation(fields: [facilitatorId], references: [id], onDelete: SetNull)
   members       AdminGroupMember[]

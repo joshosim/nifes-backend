@@ -17,9 +17,15 @@ const passwordResetRequestMessage =
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
+    const gender =
+      typeof req.body.gender === 'string' ? req.body.gender.toUpperCase() : undefined;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password, and role are required' });
+    }
+
+    if (gender && !['MALE', 'FEMALE'].includes(gender)) {
+      return res.status(400).json({ error: 'Gender must be MALE or FEMALE.' });
     }
 
     if (role === 'ADMIN') {
@@ -42,6 +48,7 @@ export const register = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         role,
+        ...(role === 'USER' && gender ? { gender } : {}),
         otp,
         otpExpiry,
         isVerified: false,

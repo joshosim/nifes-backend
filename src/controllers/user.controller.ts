@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 
+const getRequestUser = (req: Request) =>
+  (req as Request & { user?: { id: string; role: string } }).user;
+
 export const getMentors = async (req: Request, res: Response) => {
   try {
     const mentors = await prisma.user.findMany({
@@ -43,6 +46,7 @@ export const getUsers = async (req: Request, res: Response) => {
           wing: true,
           courseOfStudy: true,
           level: true,
+          gender: true,
           createdAt: true,
         },
       });
@@ -92,6 +96,10 @@ export const getOneMentor = async (req: Request, res: Response) => {
 export const getOneUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const requestUser = getRequestUser(req);
+    if (requestUser?.id !== String(id) && requestUser?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'You can only view your own profile' });
+    }
     const user = await prisma.user.findUnique({
       where: { id: String(id) },
       select: {
@@ -107,6 +115,7 @@ export const getOneUser = async (req: Request, res: Response) => {
         wing: true,
         courseOfStudy: true,
         level: true,
+        gender: true,
         createdAt: true,
       },
     });
@@ -134,7 +143,8 @@ export const updateProfile = async (req: Request, res: Response) => {
       unit,
       wing,
       courseOfStudy,
-      level
+      level,
+      gender
     } = req.body;
     const avatarUrl = req.file ? req.file.path : avatar;
 
@@ -144,6 +154,17 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     if (!ifThereIsExisitingUser) {
       return res.status(404).json({ error: "User not found" })
+    }
+    const requestUser = getRequestUser(req);
+    if (requestUser?.id !== String(id) && requestUser?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'You can only update your own profile' });
+    }
+    if (
+      gender !== undefined &&
+      gender !== '' &&
+      !['MALE', 'FEMALE'].includes(String(gender).toUpperCase())
+    ) {
+      return res.status(400).json({ error: 'Gender must be MALE, FEMALE, or empty.' });
     }
 
     const updatedUser = await prisma.user.update({
@@ -157,6 +178,7 @@ export const updateProfile = async (req: Request, res: Response) => {
         ...(wing !== undefined && { wing }),
         ...(courseOfStudy !== undefined && { courseOfStudy }),
         ...(level !== undefined && { level }),
+        ...(gender !== undefined && { gender: gender ? String(gender).toUpperCase() : null }),
       },
       select: {
         id: true,
@@ -169,6 +191,7 @@ export const updateProfile = async (req: Request, res: Response) => {
         wing: true,
         courseOfStudy: true,
         level: true,
+        gender: true,
         role: true,
         isVerified: true,
       },

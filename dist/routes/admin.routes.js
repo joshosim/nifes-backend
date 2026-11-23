@@ -25,6 +25,7 @@ router.get('/programs', admin_api_controller_1.getConferenceList);
 router.post('/programs', admin_api_controller_1.createConference);
 router.get('/programs/:id', admin_api_controller_1.conferenceDetail);
 router.patch('/programs/:id/archive', admin_api_controller_1.archiveConference);
+router.patch('/programs/:id/publish', admin_api_controller_1.publishConference);
 router.get('/programs/:id/mentors', (0, admin_api_controller_1.conferencePeople)('mentors'));
 router.get('/programs/:id/mentees', (0, admin_api_controller_1.conferencePeople)('mentees'));
 router.get('/programs/:id/groups', admin_api_controller_1.getGroups);

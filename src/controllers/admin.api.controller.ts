@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/database';
+import { createBalancedAssignmentPreview } from '../utils/conference-assignment';
 const db: any = prisma;
 
 const userSelect = { id: true, name: true, email: true, phone: true, nifesSchool: true, courseOfStudy: true, level: true, avatar: true, profilePhotoUrl: true, createdAt: true } as const;
@@ -10,6 +11,30 @@ const asDate = (value: unknown) => {
   return date;
 };
 const err = (res: Response, error: unknown) => res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
+
+async function notifyConferenceRegistrants(tx: any, conferenceName: string) {
+  const recipients = await tx.user.findMany({
+    where: {
+      isVerified: true,
+      OR: [
+        { role: 'USER' },
+        {
+          role: 'MENTOR',
+          mentorProfile: { verificationStatus: 'approved', isOnboardingComplete: true },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!recipients.length) return;
+  await tx.notification.createMany({
+    data: recipients.map((recipient: { id: string }) => ({
+      userId: recipient.id,
+      title: 'Conference registration is open',
+      body: `${conferenceName} registration is now open. Visit Sessions in UnityFlow to register.`,
+    })),
+  });
+}
 
 export const addMentor = async (req: Request, res: Response) => {
   try {
@@ -46,7 +71,67 @@ export const getConferenceList = async (req: Request, res: Response) => {
   } catch (e) { return err(res, e); }
 };
 export const createConference = async (req: Request, res: Response) => {
-  try { const { name, year, zone, startDate, endDate, details, status = 'draft' } = req.body; if (!name || !year || !zone || !startDate || !endDate) return res.status(400).json({ message: 'name, year, zone, startDate and endDate are required' }); const [mentees, mentors] = await Promise.all([db.user.findMany({ where: { role: 'USER' }, select: { id: true } }), db.user.findMany({ where: { role: 'MENTOR', mentorProfile: { verificationStatus: 'approved' } }, select: { id: true } })]); const p = await db.adminConference.create({ data: { name, year: Number(year), zone, startDate: asDate(startDate), endDate: asDate(endDate), details, status, mentees: { createMany: { data: mentees.map((u: any) => ({ menteeId: u.id })) } }, mentors: { createMany: { data: mentors.map((u: any) => ({ mentorId: u.id })) } } } }); return res.status(201).json({ program: p }); } catch (e) { return err(res, e); }
+  try {
+    const { name, year, zone, startDate, endDate, details } = req.body;
+    const status = req.body.status === 'active' ? 'active' : 'draft';
+    if (!name || !year || !zone || !startDate || !endDate) {
+      return res.status(400).json({ message: 'name, year, zone, startDate and endDate are required' });
+    }
+
+    const start = asDate(startDate);
+    const end = asDate(endDate);
+    if (end < start) return res.status(400).json({ message: 'endDate must be on or after startDate' });
+
+    const conference = await db.$transaction(async (tx: any) => {
+      const created = await tx.adminConference.create({
+        data: {
+          name: String(name).trim(),
+          year: Number(year),
+          zone: String(zone).trim(),
+          startDate: start,
+          endDate: end,
+          details,
+          status,
+        },
+      });
+
+      if (status === 'active') await notifyConferenceRegistrants(tx, created.name);
+
+      return created;
+    });
+    return res.status(201).json({ program: conference });
+  } catch (e) { return err(res, e); }
+};
+export const publishConference = async (req: Request, res: Response) => {
+  try {
+    const conferenceId = String(req.params.id);
+    const conference = await db.adminConference.findUnique({ where: { id: conferenceId } });
+    if (!conference) return res.status(404).json({ message: 'Conference not found.' });
+    if (conference.status === 'active') return res.json({ program: conference });
+    if (conference.status !== 'draft') {
+      return res.status(400).json({ message: 'Only draft conferences can be published.' });
+    }
+
+    const existingActive = await db.adminConference.findFirst({
+      where: { status: 'active', id: { not: conferenceId } },
+      select: { id: true, name: true },
+    });
+    if (existingActive) {
+      return res.status(409).json({
+        message: `Archive ${existingActive.name} before publishing another active conference.`,
+      });
+    }
+
+    const published = await db.$transaction(async (tx: any) => {
+      const updated = await tx.adminConference.update({
+        where: { id: conferenceId },
+        data: { status: 'active' },
+      });
+      await notifyConferenceRegistrants(tx, updated.name);
+      return updated;
+    });
+    return res.json({ program: published });
+  } catch (e) { return err(res, e); }
 };
 export const conferenceDetail = async (req: Request, res: Response) => {
   try { const p = await db.adminConference.findUnique({ where: { id: String(req.params.id) }, include: { _count: { select: { mentors: true, mentees: true, groups: true } } } }); if (!p) return res.status(404).json({ message: 'Program not found' }); return res.json({ program: p }); } catch (e) { return err(res, e); }
@@ -61,25 +146,221 @@ export const getGroups = async (req: Request, res: Response) => {
   try { const groups = await db.adminGroup.findMany({ where: { conferenceId: String(req.params.id) }, include: { facilitator: { select: { name: true } }, members: { include: { mentee: { select: { id: true, name: true } } } } }, orderBy: { name: 'asc' } }); return res.json({ groups: groups.map((g: any) => ({ id: g.id, name: g.name, facilitatorId: g.facilitatorId, facilitatorName: g.facilitator?.name ?? null, menteeCount: g.members.length, menteeIds: g.members.map((m: any) => m.menteeId), status: g.members.length ? 'assigned' : 'unassigned' })) }); } catch (e) { return err(res, e); }
 };
 export const createGroup = async (req: Request, res: Response) => {
-  try { const { name, facilitatorId, menteeIds = [] } = req.body; if (!name) return res.status(400).json({ message: 'name is required' }); const group = await db.adminGroup.create({ data: { conferenceId: String(req.params.id), name, facilitatorId, members: { create: Array.isArray(menteeIds) ? menteeIds.map((menteeId: string) => ({ menteeId })) : [] } }, include: { members: true } }); return res.status(201).json({ group }); } catch (e) { return err(res, e); }
+  try {
+    const { name, facilitatorId, menteeIds = [] } = req.body;
+    const conferenceId = String(req.params.id);
+    if (!name || !facilitatorId) return res.status(400).json({ message: 'name and facilitatorId are required' });
+    const mentorRegistration = await db.conferenceMentor.findUnique({
+      where: { conferenceId_mentorId: { conferenceId, mentorId: String(facilitatorId) } },
+    });
+    if (!mentorRegistration) return res.status(400).json({ message: 'The facilitator must be registered for this conference.' });
+    const memberIds = Array.isArray(menteeIds) ? menteeIds.map(String) : [];
+    if (new Set(memberIds).size !== memberIds.length) {
+      return res.status(400).json({ message: 'A mentee cannot be added to the same group more than once.' });
+    }
+    if (memberIds.length) {
+      const registrations = await db.conferenceMentee.findMany({
+        where: { conferenceId, menteeId: { in: memberIds } },
+        select: { menteeId: true },
+      });
+      if (registrations.length !== memberIds.length) {
+        return res.status(400).json({ message: 'Every group member must be registered for this conference.' });
+      }
+    }
+    const group = await db.adminGroup.create({
+      data: {
+        conferenceId,
+        name: String(name).trim(),
+        facilitatorId: String(facilitatorId),
+        members: { create: memberIds.map((menteeId: string) => ({ menteeId })) },
+      },
+      include: { members: true },
+    });
+    return res.status(201).json({ group });
+  } catch (e) { return err(res, e); }
 };
 export const updateGroup = async (req: Request, res: Response) => {
-  try { const { facilitatorId, menteeIds } = req.body; const groupId = String(req.params.groupId); const data: any = {}; if (facilitatorId !== undefined) data.facilitatorId = facilitatorId || null; if (Array.isArray(menteeIds)) { await db.adminGroupMember.deleteMany({ where: { groupId } }); data.members = { create: menteeIds.map((menteeId: string) => ({ menteeId })) }; } const group = await db.adminGroup.update({ where: { id: groupId }, data, include: { members: true } }); return res.json({ group }); } catch (e) { return err(res, e); }
+  try {
+    const conferenceId = String(req.params.id);
+    const groupId = String(req.params.groupId);
+    const { facilitatorId, menteeIds } = req.body;
+    const existing = await db.adminGroup.findFirst({ where: { id: groupId, conferenceId } });
+    if (!existing) return res.status(404).json({ message: 'Group not found for this conference.' });
+
+    const data: any = {};
+    if (facilitatorId !== undefined) {
+      if (facilitatorId) {
+        const registration = await db.conferenceMentor.findUnique({
+          where: { conferenceId_mentorId: { conferenceId, mentorId: String(facilitatorId) } },
+        });
+        if (!registration) return res.status(400).json({ message: 'The facilitator must be registered for this conference.' });
+      }
+      data.facilitatorId = facilitatorId || null;
+    }
+
+    if (Array.isArray(menteeIds)) {
+      const memberIds = menteeIds.map(String);
+      if (new Set(memberIds).size !== memberIds.length) {
+        return res.status(400).json({ message: 'A mentee cannot be added to the same group more than once.' });
+      }
+      if (memberIds.length) {
+        const registrations = await db.conferenceMentee.findMany({
+          where: { conferenceId, menteeId: { in: memberIds } },
+          select: { menteeId: true },
+        });
+        if (registrations.length !== memberIds.length) {
+          return res.status(400).json({ message: 'Every group member must be registered for this conference.' });
+        }
+      }
+      data.members = { create: memberIds.map((menteeId: string) => ({ menteeId })) };
+    }
+
+    const group = await db.$transaction(async (tx: any) => {
+      if (Array.isArray(menteeIds)) {
+        await tx.adminGroupMember.deleteMany({ where: { groupId } });
+      }
+      return tx.adminGroup.update({
+        where: { id: groupId },
+        data,
+        include: { members: true },
+      });
+    });
+    return res.json({ group });
+  } catch (e) { return err(res, e); }
 };
 export const randomAssign = async (req: Request, res: Response) => {
   try {
     const conferenceId = String(req.params.id);
-    const [groups, mentees] = await Promise.all([db.adminGroup.findMany({ where: { conferenceId }, include: { members: { include: { mentee: { select: { name: true } } } }, facilitator: { select: { name: true } } } }), db.conferenceMentee.findMany({ where: { conferenceId }, include: { mentee: { select: { id: true, name: true } } } })]);
-    if (!groups.length) return res.status(400).json({ message: 'Create at least one group before assigning mentees' });
+    const [groups, mentees, mentorRegistrations] = await Promise.all([
+      db.adminGroup.findMany({
+        where: { conferenceId },
+        include: {
+          members: { include: { mentee: { select: { id: true, name: true, gender: true } } } },
+          facilitator: { select: { name: true } },
+        },
+      }),
+      db.conferenceMentee.findMany({
+        where: { conferenceId },
+        include: { mentee: { select: { id: true, name: true, gender: true } } },
+      }),
+      db.conferenceMentor.findMany({
+        where: {
+          conferenceId,
+          mentor: { mentorProfile: { verificationStatus: 'approved', isOnboardingComplete: true } },
+        },
+        include: { mentor: { select: { id: true, name: true } } },
+      }),
+    ]);
     const already = new Set(groups.flatMap((g: any) => g.members.map((m: any) => m.menteeId)));
-    const available = mentees.filter((m: any) => !already.has(m.menteeId)).sort(() => Math.random() - .5);
-    const proposed: Record<string, any[]> = Object.fromEntries(groups.map((g: any) => [g.id, []]));
-    available.forEach((m: any, i: number) => proposed[groups[i % groups.length].id].push(m.mentee));
-    return res.json({ preview: { preservedRelationships: already.size, newProposals: available.length, totalAllocated: already.size + available.length, mentorLedGroups: groups.filter((g: any) => g.facilitatorId).length, groups: groups.map((g: any) => ({ id: g.id, name: g.name, facilitatorName: g.facilitator?.name ?? '', size: g.members.length + proposed[g.id].length, preserved: g.members.length, proposed: proposed[g.id].length, members: [...g.members.map((m: any) => ({ id: m.menteeId, name: m.mentee.name, status: 'preserved' })), ...proposed[g.id].map((m: any) => ({ ...m, status: 'proposed' }))] })) } });
+    const available = mentees
+      .filter((mentee: any) => !already.has(mentee.menteeId))
+      .map((mentee: any) => mentee.mentee);
+    const preview = createBalancedAssignmentPreview(
+      groups.map((group: any) => ({
+        ...group,
+        facilitatorName: group.facilitator?.name ?? null,
+      })),
+      mentorRegistrations.map((registration: any) => registration.mentor),
+      available,
+    );
+    if (!preview) {
+      return res.status(400).json({
+        message: 'At least one approved, registered mentor is needed before assigning mentees.',
+      });
+    }
+    if (preview.groups.some((group) => !group.facilitatorId)) {
+      return res.status(400).json({
+        message: 'Assign a registered mentor to each existing group before shuffling mentees.',
+      });
+    }
+    return res.json({ preview });
   } catch (e) { return err(res, e); }
 };
 export const confirmAssignments = async (req: Request, res: Response) => {
-  try { const groups = Array.isArray(req.body?.groups) ? req.body.groups : []; await db.$transaction(groups.flatMap((g: any) => Array.isArray(g.menteeIds) ? g.menteeIds.map((menteeId: string) => db.adminGroupMember.upsert({ where: { groupId_menteeId: { groupId: g.id, menteeId } }, create: { groupId: g.id, menteeId }, update: {} })) : [])); return res.json({ message: 'Assignments confirmed' }); } catch (e) { return err(res, e); }
+  try {
+    const conferenceId = String(req.params.id);
+    const groups = Array.isArray(req.body?.groups) ? req.body.groups : [];
+    if (!groups.length) return res.status(400).json({ message: 'Assignment groups are required.' });
+
+    const [conferenceMentees, conferenceMentors, existingGroups, existingMembers] = await Promise.all([
+      db.conferenceMentee.findMany({ where: { conferenceId }, select: { menteeId: true } }),
+      db.conferenceMentor.findMany({ where: { conferenceId }, select: { mentorId: true } }),
+      db.adminGroup.findMany({ where: { conferenceId }, select: { id: true } }),
+      db.adminGroupMember.findMany({
+        where: { group: { conferenceId } },
+        select: { groupId: true, menteeId: true },
+      }),
+    ]);
+    const allowedMenteeIds = new Set(conferenceMentees.map((row: any) => row.menteeId));
+    const allowedMentorIds = new Set(conferenceMentors.map((row: any) => row.mentorId));
+    const existingGroupIds = new Set(existingGroups.map((group: any) => group.id));
+    const assignedToGroup = new Map(
+      existingMembers.map((member: any) => [member.menteeId, member.groupId]),
+    );
+    const submittedMenteeIds = new Set<string>();
+
+    for (const group of groups) {
+      if (
+        typeof group.id !== 'string' ||
+        typeof group.name !== 'string' ||
+        typeof group.facilitatorId !== 'string' ||
+        !allowedMentorIds.has(group.facilitatorId) ||
+        !Array.isArray(group.menteeIds)
+      ) {
+        return res.status(400).json({ message: 'Assignment group data is invalid.' });
+      }
+      for (const menteeId of group.menteeIds) {
+        if (
+          typeof menteeId !== 'string' ||
+          !allowedMenteeIds.has(menteeId) ||
+          submittedMenteeIds.has(menteeId) ||
+          (assignedToGroup.has(menteeId) && assignedToGroup.get(menteeId) !== group.id)
+        ) {
+          return res.status(400).json({ message: 'A mentee is invalid or assigned to multiple groups.' });
+        }
+        submittedMenteeIds.add(menteeId);
+      }
+    }
+
+    const submittedExistingIds = groups
+      .map((group: any) => group.id)
+      .filter((id: string) => existingGroupIds.has(id));
+    const matchedExisting = await db.adminGroup.findMany({
+      where: { conferenceId, id: { in: submittedExistingIds } },
+      select: { id: true },
+    });
+    if (matchedExisting.length !== submittedExistingIds.length) {
+      return res.status(400).json({ message: 'An assignment group does not belong to this conference.' });
+    }
+
+    await db.$transaction(async (tx: any) => {
+      for (const group of groups) {
+        if (existingGroupIds.has(group.id)) {
+          await tx.adminGroup.update({
+            where: { id: group.id },
+            data: { facilitatorId: group.facilitatorId },
+          });
+        } else {
+          await tx.adminGroup.create({
+            data: {
+              id: group.id,
+              conferenceId,
+              name: group.name,
+              facilitatorId: group.facilitatorId,
+            },
+          });
+        }
+        for (const menteeId of group.menteeIds) {
+          await tx.adminGroupMember.upsert({
+            where: { groupId_menteeId: { groupId: group.id, menteeId } },
+            create: { groupId: group.id, menteeId },
+            update: {},
+          });
+        }
+      }
+    });
+    return res.json({ message: 'Assignments confirmed.' });
+  } catch (e) { return err(res, e); }
 };
 export const conferenceReport = async (req: Request, res: Response) => {
   try { const [totalMentors, totalMentees, groups] = await Promise.all([db.conferenceMentor.count({ where: { conferenceId: String(req.params.id) } }), db.conferenceMentee.count({ where: { conferenceId: String(req.params.id) } }), db.adminGroup.findMany({ where: { conferenceId: String(req.params.id) }, include: { _count: { select: { members: true } } } })]); const assignedMentees = groups.reduce((n: number,g: any)=>n+g._count.members,0); return res.json({ report: { totalMentors, assignedMentees, unassignedMentees: Math.max(totalMentees-assignedMentees,0) } }); } catch (e) { return err(res, e); }
