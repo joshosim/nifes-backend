@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/database';
 import { createBalancedAssignmentPreview } from '../utils/conference-assignment';
+import { needsMentorVerificationReminder } from '../utils/mentor-verification-reminder';
+import { sendMentorOnboardingReminder } from '../utils/otp';
 const db: any = prisma;
 
 const userSelect = { id: true, name: true, email: true, phone: true, nifesSchool: true, courseOfStudy: true, level: true, avatar: true, profilePhotoUrl: true, createdAt: true } as const;
@@ -56,6 +58,61 @@ export const getMentorTable = async (_: Request, res: Response) => {
 export const getMentorTableByStatus = (status: string) => async (_: Request, res: Response) => {
   try { const rows = await db.user.findMany({ where: { role: 'MENTOR', mentorProfile: { verificationStatus: status, ...(status === 'pending' ? { isOnboardingComplete: true } : {}) } }, include: { mentorProfile: true }, orderBy: { createdAt: 'desc' } }); return res.json({ mentors: rows.map(formatMentor) }); } catch (e) { return err(res, e); }
 };
+async function getMentorsMissingVerificationInformation() {
+  const mentors = await prisma.user.findMany({
+    where: { role: 'MENTOR', isVerified: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mentorProfile: {
+        select: {
+          fellowshipPosition: true,
+          campus: true,
+          verificationFileUrl: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return mentors.filter(needsMentorVerificationReminder);
+}
+
+export const getMentorsMissingVerification = async (_: Request, res: Response) => {
+  try {
+    const mentors = await getMentorsMissingVerificationInformation();
+    return res.json({
+      count: mentors.length,
+      mentors: mentors.map(({ id, name, email }) => ({ id, name, email })),
+    });
+  } catch (error) {
+    return err(res, error);
+  }
+};
+
+export const sendMentorVerificationReminders = async (_: Request, res: Response) => {
+  try {
+    const mentors = await getMentorsMissingVerificationInformation();
+    let sent = 0;
+    let failed = 0;
+
+    for (const mentor of mentors) {
+      try {
+        await sendMentorOnboardingReminder(mentor.name, mentor.email);
+        sent += 1;
+      } catch {
+        failed += 1;
+        console.error('Failed to send mentor onboarding reminder', { userId: mentor.id });
+      }
+    }
+
+    return res.json({ total: mentors.length, sent, failed });
+  } catch (error) {
+    return err(res, error);
+  }
+};
+
 export const getAdminUsers = async (_: Request, res: Response) => {
   try { const rows = await db.user.findMany({ where: { role: 'USER' }, select: userSelect, orderBy: { createdAt: 'desc' } }); return res.json({ users: rows.map((u: any) => ({ ...u, school: u.nifesSchool, profileImage: u.profilePhotoUrl ?? u.avatar })) }); } catch (e) { return err(res, e); }
 };

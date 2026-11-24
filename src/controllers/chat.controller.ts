@@ -27,10 +27,16 @@ export const getConversations = async (req: Request, res: Response) => {
       },
       include: {
         mentor: {
-          select: { id: true, name: true, avatar: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            mentorProfile: { select: { profilePhotoUrl: true } },
+          },
         },
         user: {
-          select: { id: true, name: true, avatar: true },
+          select: { id: true, name: true, email: true, avatar: true },
         },
         messages: {
           orderBy: { createdAt: 'desc' },
@@ -94,7 +100,7 @@ export const getMessages = async (req: Request, res: Response) => {
       }),
       include: {
         sender: {
-          select: { id: true, name: true, avatar: true },
+          select: { id: true, name: true, email: true, avatar: true },
         },
       },
     });
@@ -156,8 +162,16 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
       update: {}, // already exists, just return it
       create: { mentorId, userId },
       include: {
-        mentor: { select: { id: true, name: true, avatar: true } },
-        user: { select: { id: true, name: true, avatar: true } },
+        mentor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            mentorProfile: { select: { profilePhotoUrl: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true, avatar: true } },
       },
     });
 

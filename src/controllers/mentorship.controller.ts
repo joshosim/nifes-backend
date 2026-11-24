@@ -16,7 +16,7 @@ export const getMenteeRequestStatus = async (req: Request, res: Response) => {
       include: {
         mentor: {
           select: {
-            id: true, name: true, avatar: true,
+            id: true, name: true, email: true, avatar: true,
             mentorProfile: { select: { profilePhotoUrl: true, bio: true, focusArea: true } },
           },
         },
@@ -36,7 +36,7 @@ export const getMentorIncomingRequests = async (req: Request, res: Response) => 
       where: { mentorId },
       include: {
         mentee: {
-          select: { id: true, name: true, avatar: true, nifesSchool: true, courseOfStudy: true, level: true },
+          select: { id: true, name: true, email: true, avatar: true, nifesSchool: true, courseOfStudy: true, level: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -110,7 +110,7 @@ export const getMenteesByMentor = async (req: Request, res: Response) => {
       where: { mentorId, status: 'ACCEPTED' },
       include: {
         mentee: {
-          select: { id: true, name: true, avatar: true, nifesSchool: true, courseOfStudy: true, level: true },
+          select: { id: true, name: true, email: true, avatar: true, nifesSchool: true, courseOfStudy: true, level: true },
         },
       },
     });

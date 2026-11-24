@@ -27,6 +27,7 @@ import {
 } from '../controllers/admin.controller';
 import {
   addMentor, getMentorTable, getMentorTableByStatus, getAdminUsers, getUsersByAssignment,
+  getMentorsMissingVerification, sendMentorVerificationReminders,
   getConferenceList, createConference, publishConference, conferenceDetail, archiveConference, conferencePeople,
   getGroups, createGroup, updateGroup, randomAssign, confirmAssignments, conferenceReport,
   getRecordedSessions, createRecordedSession, updateRecordedSession, deleteRecordedSession,
@@ -50,6 +51,8 @@ router.get('/mentors', getMentorTable);
 router.get('/mentors/pending', getMentorTableByStatus('pending'));
 router.get('/mentors/approved', getMentorTableByStatus('approved'));
 router.get('/mentors/rejected', getMentorTableByStatus('rejected'));
+router.get('/mentors/missing-verification', getMentorsMissingVerification);
+router.post('/mentors/missing-verification/remind', sendMentorVerificationReminders);
 router.post('/mentors', addMentor);
 router.get('/users', getAdminUsers);
 router.get('/users/assigned', getUsersByAssignment(true));

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { generateOTP, sendOTP } from '../utils/otp';
+import { generateOTP, sendOTP, sendWelcomeEmail } from '../utils/otp';
 import { prisma } from '../config/database';
 import type { AuthRequest } from '../middleware/auth.middleware';
 
@@ -97,7 +97,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
-    await prisma.user.update({
+    const verifiedUser = await prisma.user.update({
       where: { email },
       data: {
         isVerified: true,
@@ -105,6 +105,8 @@ export const verifyOTP = async (req: Request, res: Response) => {
         otpExpiry: null,
       }
     })
+
+    await sendWelcomeEmail(verifiedUser.name, verifiedUser.email);
 
     res.json({
       message: "Account verified successfully! You can now log in.",

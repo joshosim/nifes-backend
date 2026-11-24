@@ -1,6 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { prisma } from './database';
+import { sendWelcomeEmail } from '../utils/otp';
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -35,7 +36,6 @@ if (isGoogleOAuthConfigured) {
 
         try {
           const name = profile.displayName.trim() || verifiedEmail.split('@')[0];
-          const avatar = profile.photos?.[0]?.value;
           const state = typeof req.query.state === 'string' ? req.query.state : '';
           const requestedRole = state.endsWith('.MENTOR') ? 'MENTOR' : 'USER';
           const [linkedUser, emailMatches] = await Promise.all([
@@ -68,7 +68,6 @@ if (isGoogleOAuthConfigured) {
               data: {
                 googleId,
                 isVerified: true,
-                avatar: existingUser.avatar ?? avatar,
                 authProvider: existingUser.password ? existingUser.authProvider : 'google',
               },
             });
@@ -79,13 +78,14 @@ if (isGoogleOAuthConfigured) {
             data: {
               email: verifiedEmail,
               name,
-              avatar,
               googleId,
               authProvider: 'google',
               role: requestedRole,
               isVerified: true,
             },
           });
+
+          await sendWelcomeEmail(user.name, user.email);
 
           return done(null, user);
         } catch (error) {
