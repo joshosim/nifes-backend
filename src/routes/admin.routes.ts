@@ -38,6 +38,12 @@ import { uploadProfilePics, uploadTeachingMedia } from '../config/cloundinary';
 
 const { authMiddleware } = require('../middleware/auth.middleware');
 import { requireRole } from '../middleware/role.middleware';
+import {
+  createConferenceSession,
+  getConferenceSessionAttendance,
+  getConferenceSessions,
+  openSessionAttendance,
+} from '../controllers/conference-attendance.controller';
 
 const router = Router();
 
@@ -65,6 +71,10 @@ router.post('/programs', createConference);
 router.get('/programs/:id', conferenceDetail);
 router.patch('/programs/:id/archive', archiveConference);
 router.patch('/programs/:id/publish', publishConference);
+router.get('/programs/:id/sessions', getConferenceSessions);
+router.post('/programs/:id/sessions', createConferenceSession);
+router.post('/programs/:id/sessions/:sessionId/attendance/open', openSessionAttendance);
+router.get('/programs/:id/sessions/:sessionId/attendance', getConferenceSessionAttendance);
 router.get('/programs/:id/mentors', conferencePeople('mentors'));
 router.get('/programs/:id/mentees', conferencePeople('mentees'));
 router.get('/programs/:id/groups', getGroups);
