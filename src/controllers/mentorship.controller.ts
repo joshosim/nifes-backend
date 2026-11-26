@@ -89,15 +89,34 @@ export const respondToRequest = async (req: Request, res: Response) => {
 export const getMyMentees = async (req: Request, res: Response) => {
   try {
     const mentorId = getUser(req).id;
-    const accepted = await prisma.mentorshipRequest.findMany({
-      where: { mentorId, status: 'ACCEPTED' },
-      include: {
-        mentee: {
-          select: { id: true, name: true, avatar: true, email: true, nifesSchool: true, courseOfStudy: true, level: true },
+    const [accepted, facilitatedGroups] = await Promise.all([
+      prisma.mentorshipRequest.findMany({
+        where: { mentorId, status: 'ACCEPTED' },
+        include: {
+          mentee: {
+            select: { id: true, name: true, avatar: true, email: true, nifesSchool: true, courseOfStudy: true, level: true },
+          },
         },
-      },
-    });
-    return res.json({ mentees: accepted.map((r) => r.mentee) });
+      }),
+      prisma.adminGroup.findMany({
+        where: { facilitatorId: mentorId },
+        include: {
+          members: {
+            include: {
+              mentee: {
+                select: { id: true, name: true, avatar: true, email: true, nifesSchool: true, courseOfStudy: true, level: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    const menteesById = new Map<string, (typeof accepted)[number]['mentee']>();
+    accepted.forEach(({ mentee }) => menteesById.set(mentee.id, mentee));
+    facilitatedGroups.forEach(({ members }) => members.forEach(({ mentee }) => {
+      if (!menteesById.has(mentee.id)) menteesById.set(mentee.id, mentee);
+    }));
+    return res.json({ mentees: [...menteesById.values()] });
   } catch (error) {
     return res.status(500).json({ error: 'Server error', details: error });
   }
